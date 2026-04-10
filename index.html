@@ -584,6 +584,47 @@ body.light .streak-dot.s4 { background: #34C759; }
 .ob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fill); flex-shrink: 0; transition: background .2s; }
 .ob-dot.active { background: var(--blue); }
 
+/* Rest day toggle */
+.rest-day-toggle { display:flex; align-items:center; gap:8px; background:var(--surface); border-radius:12px; padding:10px 14px; margin:12px 16px 0; cursor:pointer; transition:all .15s; border:2px solid transparent; }
+.rest-day-toggle:active { transform:scale(.98); opacity:.8; }
+.rest-day-toggle.active { border-color:var(--orange); background:rgba(255,159,10,.08); }
+.rest-day-toggle-icon { font-size:20px; }
+.rest-day-toggle-text { flex:1; }
+.rest-day-toggle-label { font-size:14px; font-weight:600; }
+.rest-day-toggle-sub { font-size:11px; color:var(--label2); }
+.rest-day-switch { width:44px; height:26px; border-radius:13px; background:var(--fill); position:relative; transition:background .2s; flex-shrink:0; }
+.rest-day-switch.on { background:var(--orange); }
+.rest-day-switch::after { content:''; position:absolute; width:22px; height:22px; border-radius:50%; background:white; top:2px; left:2px; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+.rest-day-switch.on::after { transform:translateX(18px); }
+body.light .rest-day-toggle { background:#fff; }
+
+/* Gym card menu */
+.gym-card-menu { display:flex; flex-direction:column; gap:12px; padding:16px; }
+.gym-menu-card { background:var(--surface); border-radius:18px; padding:20px; cursor:pointer; position:relative; overflow:hidden; border:1px solid var(--sep); transition:transform .12s, opacity .12s; }
+.gym-menu-card:active { transform:scale(.97); opacity:.85; }
+.gym-menu-card-icon { font-size:32px; margin-bottom:10px; }
+.gym-menu-card-title { font-size:20px; font-weight:700; letter-spacing:-.4px; margin-bottom:4px; }
+.gym-menu-card-sub { font-size:13px; color:var(--label2); line-height:1.4; }
+.gym-menu-card-arrow { position:absolute; top:20px; right:18px; color:var(--label3); font-size:20px; }
+.gym-menu-card-stat { position:absolute; bottom:18px; right:18px; text-align:right; }
+.gym-menu-card-stat-val { font-size:22px; font-weight:700; color:var(--blue); }
+.gym-menu-card-stat-lbl { font-size:10px; color:var(--label3); text-transform:uppercase; }
+body.light .gym-menu-card { background:#fff; }
+
+/* Gym sub-page back */
+.gym-sub-back { display:flex; align-items:center; gap:6px; padding:12px 16px; color:var(--blue); font-size:15px; font-weight:500; cursor:pointer; background:none; border:none; font-family:inherit; }
+.gym-sub-back:active { opacity:.5; }
+
+/* Gym journal list */
+.gym-journal-item { display:flex; align-items:center; padding:14px 16px; gap:14px; position:relative; cursor:pointer; transition:background .1s; }
+.gym-journal-item:active { background:var(--fill2); }
+.gym-journal-item + .gym-journal-item::before { content:''; position:absolute; top:0; left:60px; right:0; height:1px; background:var(--sep); }
+.gym-journal-emoji { font-size:28px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:var(--fill); border-radius:12px; flex-shrink:0; }
+.gym-journal-info { flex:1; min-width:0; }
+.gym-journal-name { font-size:16px; font-weight:600; }
+.gym-journal-meta { font-size:12px; color:var(--label2); margin-top:2px; }
+.gym-journal-arrow { color:var(--label3); font-size:16px; flex-shrink:0; }
+
 @keyframes checkBounce { 0%{transform:scale(1)} 45%{transform:scale(1.28)} 75%{transform:scale(.92)} 100%{transform:scale(1.06)} }
 .hcheck.pop { animation: checkBounce .3s ease forwards; }
 @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
@@ -758,7 +799,15 @@ body.light .streak-dot.s4 { background: #34C759; }
       <div class="h-stat"><div class="h-stat-val" id="h-sMo" style="color:var(--green)">—</div><div class="h-stat-lbl">This Month</div></div>
       <div class="h-stat"><div class="h-stat-val" id="h-sTo" style="color:var(--blue)">0</div><div class="h-stat-lbl">Habits</div></div>
     </div>
-    <div class="sec"><div class="sec-hdr">My Habits</div><div class="card" id="h-habitList"></div></div>
+    <div class="rest-day-toggle" id="h-restDayToggle" onclick="hToggleRestDay()">
+      <div class="rest-day-toggle-icon">🛌</div>
+      <div class="rest-day-toggle-text">
+        <div class="rest-day-toggle-label">Rest Day</div>
+        <div class="rest-day-toggle-sub" id="h-restDaySub">Only essential habits today</div>
+      </div>
+      <div class="rest-day-switch" id="h-restDaySwitch"></div>
+    </div>
+    <div class="sec"><div class="sec-hdr" id="h-habitListHdr">My Habits</div><div class="card" id="h-habitList"></div></div>
     <div style="height:16px"></div>
   </div>
 
@@ -803,30 +852,41 @@ body.light .streak-dot.s4 { background: #34C759; }
 <div class="page" id="page-gym">
   <div class="page-nav">
     <div class="page-nav-inner">
-      <button class="back-btn" onclick="closePage('gym')">‹ Home</button>
-      <div class="page-nav-title">Gym Diary</div>
-      <button class="page-nav-action" onclick="gOpenNewSession()" style="font-weight:600">+ Log</button>
-    </div>
-    <div class="seg-ctrl" style="margin-bottom:12px;margin-top:4px">
-      <button class="seg-btn active" id="gtab-btn-today" onclick="gGoTab('today',this)">Today</button>
-      <button class="seg-btn" id="gtab-btn-progress" onclick="gGoTab('progress',this)">Progress</button>
-      <button class="seg-btn" id="gtab-btn-history" onclick="gGoTab('history',this)">History</button>
-      <button class="seg-btn" id="gtab-btn-routines" onclick="gGoTab('routines',this)">Routines</button>
+      <button class="back-btn" id="gym-back-btn" onclick="gBackAction()">‹ Home</button>
+      <div class="page-nav-title" id="gym-nav-title">Gym Diary</div>
+      <div id="gym-nav-action"></div>
     </div>
   </div>
 
-  <!-- Today / Log Session -->
-  <div class="page-scroll no-tab" id="g-tab-today">
-    <div style="padding:0 16px;margin-top:16px">
-      <div style="font-size:13px;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Select Routine</div>
+  <!-- Card Menu (main gym view) -->
+  <div class="page-scroll no-tab" id="g-card-menu">
+    <div class="gym-card-menu">
+      <div class="gym-menu-card" onclick="gOpenSub('overview')">
+        <div class="gym-menu-card-icon">📊</div>
+        <div class="gym-menu-card-title">Overview</div>
+        <div class="gym-menu-card-sub">Weekly volume, exercise progress, body weight tracking</div>
+        <div class="gym-menu-card-arrow">›</div>
+        <div class="gym-menu-card-stat" id="g-menu-stat-overview"></div>
+      </div>
+      <div class="gym-menu-card" onclick="gOpenSub('journal')">
+        <div class="gym-menu-card-icon">📝</div>
+        <div class="gym-menu-card-title">Gym Journal</div>
+        <div class="gym-menu-card-sub">Log workouts, view session history</div>
+        <div class="gym-menu-card-arrow">›</div>
+        <div class="gym-menu-card-stat" id="g-menu-stat-journal"></div>
+      </div>
+      <div class="gym-menu-card" onclick="gOpenSub('routines')">
+        <div class="gym-menu-card-icon">⚙️</div>
+        <div class="gym-menu-card-title">My Routines</div>
+        <div class="gym-menu-card-sub">Edit routines, reorder exercises, customize your plan</div>
+        <div class="gym-menu-card-arrow">›</div>
+        <div class="gym-menu-card-stat" id="g-menu-stat-routines"></div>
+      </div>
     </div>
-    <div class="day-cards-scroll" id="g-day-cards"></div>
-    <div id="g-session-area" style="margin-top:16px"></div>
-    <div style="height:16px"></div>
   </div>
 
-  <!-- Progress -->
-  <div class="page-scroll no-tab" id="g-tab-progress" style="display:none">
+  <!-- Sub: Overview -->
+  <div class="page-scroll no-tab" id="g-sub-overview" style="display:none">
     <div class="sec" style="margin-top:16px">
       <div class="sec-hdr">Weekly Volume</div>
       <div class="vol-card" id="g-vol-card"></div>
@@ -835,7 +895,6 @@ body.light .streak-dot.s4 { background: #34C759; }
       <div class="sec-hdr">Exercise Progress</div>
       <div id="g-progress-list"></div>
     </div>
-    <!-- Weight Tracker -->
     <div class="sec">
       <div class="sec-hdr">Body Weight</div>
       <div class="card" id="g-weight-tracker" style="padding:14px 16px"></div>
@@ -843,16 +902,19 @@ body.light .streak-dot.s4 { background: #34C759; }
     <div style="height:16px"></div>
   </div>
 
-  <!-- History -->
-  <div class="page-scroll no-tab" id="g-tab-history" style="display:none">
+  <!-- Sub: Gym Journal -->
+  <div class="page-scroll no-tab" id="g-sub-journal" style="display:none">
+    <div id="g-journal-list" style="margin-top:8px"></div>
+    <div id="g-session-area" style="margin-top:16px"></div>
     <div class="sec" style="margin-top:16px">
+      <div class="sec-hdr">Session History</div>
       <div class="card" id="g-history-list"></div>
     </div>
     <div style="height:16px"></div>
   </div>
 
-  <!-- Routines -->
-  <div class="page-scroll no-tab" id="g-tab-routines" style="display:none">
+  <!-- Sub: Routines -->
+  <div class="page-scroll no-tab" id="g-sub-routines" style="display:none">
     <div class="sec" style="margin-top:16px">
       <div class="sec-hdr">My Routines</div>
       <div id="g-routines-list"></div>
@@ -1281,10 +1343,10 @@ function loadApp(){
 // HOME STATS
 // ══════════════════════════════════════════════════
 function updateHomeStats(){
-  const h = hGetMonthHabits(NOW.getFullYear(), NOW.getMonth());
+  const activeH = hGetActiveHabits(TODAY);
   const log = hGetLog(TODAY);
-  const done = h.filter(x=>log[x.id]).length;
-  const pct = h.length ? Math.round(done/h.length*100)+'%' : '—';
+  const done = activeH.filter(x=>log[x.id]).length;
+  const pct = activeH.length ? Math.round(done/activeH.length*100)+'%' : '—';
   document.getElementById('home-habit-pct').textContent = pct;
   document.getElementById('card-habit-pct').textContent = pct;
 
@@ -1323,7 +1385,9 @@ function hMoPct(y,m){
   const days=daysIn(y,m); let sum=0,cnt=0;
   for(let d=1;d<=days;d++){
     const ds=dsOf(y,m,d); if(ds>TODAY) continue;
-    sum+=h.filter(x=>hGetLog(ds)[x.id]).length/h.length; cnt++;
+    const active=hGetActiveHabits(ds);
+    if(!active.length) continue;
+    sum+=active.filter(x=>hGetLog(ds)[x.id]).length/active.length; cnt++;
   }
   return cnt?Math.round(sum/cnt*100):null;
 }
@@ -1342,13 +1406,42 @@ function hAllDoneStreak(){
   let streak=0; const d=new Date(NOW);
   for(let i=0;i<730;i++){
     const ds=fmt(d); if(ds>TODAY){d.setDate(d.getDate()-1);continue;}
-    const h=hGetMonthHabits(d.getFullYear(),d.getMonth());
-    if(!h.length) break;
-    const allDone=h.every(x=>hGetLog(ds)[x.id]);
+    const active=hGetActiveHabits(ds);
+    if(!active.length) break;
+    const allDone=active.every(x=>hGetLog(ds)[x.id]);
     if(allDone){streak++;}else{if(ds===TODAY){d.setDate(d.getDate()-1);continue;}break;}
     d.setDate(d.getDate()-1);
   }
   return streak;
+}
+
+// ── Rest Day ──
+// Essential habits are the first 3 in the list (user can reorder to prioritize)
+const REST_DAY_ESSENTIAL_COUNT = 3;
+
+function hIsRestDay(ds){
+  return !!(APP.habits?.restDays && APP.habits.restDays[ds]);
+}
+
+function hToggleRestDay(){
+  if(!APP.habits.restDays) APP.habits.restDays = {};
+  if(APP.habits.restDays[TODAY]){
+    delete APP.habits.restDays[TODAY];
+  } else {
+    APP.habits.restDays[TODAY] = true;
+  }
+  saveApp(); hRenderAll(); updateHomeStats();
+}
+
+function hGetActiveHabits(ds){
+  // Returns habits that should count for a given day
+  const d = new Date(ds+'T12:00:00');
+  const h = hGetMonthHabits(d.getFullYear(), d.getMonth());
+  if(hIsRestDay(ds)){
+    // On rest days, only the first N habits are "expected"
+    return h.slice(0, Math.min(REST_DAY_ESSENTIAL_COUNT, h.length));
+  }
+  return h;
 }
 
 // ── Habit Render ──
@@ -1356,26 +1449,43 @@ function hRenderAll(){ hRenderToday(); hRenderCalendar(); hRenderAnalysis(); }
 
 function hRenderToday(){
   const log=hGetLog(TODAY), h=hGetMonthHabits(NOW.getFullYear(),NOW.getMonth());
-  const done=h.filter(x=>log[x.id]).length, pct=h.length?Math.round(done/h.length*100):0;
+  const isRest = hIsRestDay(TODAY);
+  const activeH = hGetActiveHabits(TODAY);
+  const done=activeH.filter(x=>log[x.id]).length, pct=activeH.length?Math.round(done/activeH.length*100):0;
   const circ=213.6;
   document.getElementById('h-ringFg').style.strokeDashoffset=circ-(pct/100)*circ;
+  document.getElementById('h-ringFg').style.stroke=isRest?'var(--orange)':'var(--green)';
   document.getElementById('h-rPct').textContent=pct+'%';
-  document.getElementById('h-rSub').textContent=`${done}/${h.length}`;
+  document.getElementById('h-rSub').textContent=`${done}/${activeH.length}`;
   document.getElementById('h-hDate').textContent=`${MONTHS[NOW.getMonth()]} ${NOW.getDate()}`;
-  document.getElementById('h-hDay').textContent=WDAYS[NOW.getDay()];
+  document.getElementById('h-hDay').textContent=WDAYS[NOW.getDay()]+(isRest?' (Rest Day)':'');
   document.getElementById('h-hBar').style.width=pct+'%';
-  document.getElementById('h-hCap').textContent=h.length===0?'Tap + to add habits':done===h.length?'🎉 All done for today!':`${h.length-done} remaining`;
+  document.getElementById('h-hBar').style.background=isRest?'var(--orange)':'var(--green)';
+  document.getElementById('h-hCap').textContent=h.length===0?'Tap + to add habits':done===activeH.length?(isRest?'🛌 Rest day complete!':'🎉 All done for today!'):`${activeH.length-done} remaining`;
   document.getElementById('h-sSt').textContent=hAllDoneStreak()>0?hAllDoneStreak()+'d':'—';
   document.getElementById('h-sMo').textContent=hMoPct(NOW.getFullYear(),NOW.getMonth())!==null?hMoPct(NOW.getFullYear(),NOW.getMonth())+'%':'—';
   document.getElementById('h-sTo').textContent=h.length;
 
+  // Rest day toggle state
+  const toggle=document.getElementById('h-restDayToggle');
+  const sw=document.getElementById('h-restDaySwitch');
+  const sub=document.getElementById('h-restDaySub');
+  if(toggle){ toggle.classList.toggle('active', isRest); }
+  if(sw){ sw.classList.toggle('on', isRest); }
+  if(sub){ sub.textContent=isRest?`Only ${Math.min(REST_DAY_ESSENTIAL_COUNT,h.length)} essential habits today`:'Mark today as a rest day'; }
+  document.getElementById('h-habitListHdr').textContent=isRest?'Essential Habits':'My Habits';
+
   const list=document.getElementById('h-habitList');
   if(!h.length){list.innerHTML=`<div class="empty"><div class="empty-ico">✅</div><div class="empty-h">No habits yet</div><div class="empty-p">Tap + to add your first habit.</div></div>`;return;}
   list.innerHTML='';
-  h.forEach(hb=>{
+
+  // Show all habits but visually de-emphasize non-essential on rest days
+  h.forEach((hb, idx)=>{
     const isDone=!!log[hb.id], s=hHabitStreak(hb.id);
+    const isEssential = !isRest || idx < REST_DAY_ESSENTIAL_COUNT;
     const row=document.createElement('div'); row.className='habit-row';
-    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>`;
+    if(!isEssential) row.style.opacity='0.4';
+    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}${!isEssential?' <span style="font-size:11px;color:var(--label3)">(optional)</span>':''}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>`;
     row.addEventListener('click',()=>{
       const wasOff=!hGetLog(TODAY)[hb.id]; hToggleLog(TODAY,hb.id);
       if(wasOff){const cb=document.getElementById('hck_'+hb.id);if(cb){cb.classList.add('on','pop');setTimeout(()=>cb.classList.remove('pop'),300);}setTimeout(()=>{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();},150);}
@@ -1383,6 +1493,15 @@ function hRenderToday(){
     });
     list.appendChild(row);
   });
+
+  // Add separator before optional habits on rest days
+  if(isRest && h.length > REST_DAY_ESSENTIAL_COUNT){
+    const sep=document.createElement('div');
+    sep.style.cssText='padding:8px 16px;font-size:11px;color:var(--label3);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px';
+    sep.textContent='Optional today';
+    const rows=list.children;
+    if(rows[REST_DAY_ESSENTIAL_COUNT]) list.insertBefore(sep, rows[REST_DAY_ESSENTIAL_COUNT]);
+  }
 }
 
 function hRenderCalendar(){
@@ -1654,11 +1773,15 @@ let gSelectedRoutine = null;
 let gActiveSession = null; // { routineId, date, exercises: {exId: [{reps,weight,done}]} }
 let gCurTab = 'today';
 
-function gRenderAll(){ gRenderDayCards(); gRenderSessionArea(); gRenderProgress(); gRenderHistory(); gRenderRoutines(); }
+function gRenderAll(){
+  gUpdateMenuStats(); gRenderJournalList(); gRenderSessionArea(); gRenderProgress(); gRenderHistory(); gRenderRoutines();
+}
 
-// ── Routine day cards ──
+// ── Routine day cards (legacy — now uses journal list) ──
 function gRenderDayCards(){
-  const wrap=document.getElementById('g-day-cards'); wrap.innerHTML='';
+  const wrap=document.getElementById('g-day-cards');
+  if(!wrap) return; // Element removed in v12
+  wrap.innerHTML='';
   APP.gym.routines.forEach(r=>{
     const sessions=APP.gym.sessions.filter(s=>s.routineId===r.id).length;
     const card=document.createElement('div');
@@ -1867,7 +1990,7 @@ function gCancelSession(){
     if(!gActiveSession) return;
     APP.gym.sessions=APP.gym.sessions.filter(s=>s.id!==gActiveSession.id);
     saveApp(); gActiveSession=null;
-    gRenderDayCards(); gRenderSessionArea();
+    gRenderDayCards(); gRenderJournalList(); gRenderSessionArea();
   });
 }
 
@@ -2251,15 +2374,95 @@ function gCloseRoutineSheet(){
   document.getElementById('g-routine-sheet').classList.remove('on');
 }
 
-function gOpenNewSession(){ gGoTab('today',document.getElementById('gtab-btn-today')); gRenderDayCards(); gRenderSessionArea(); }
+function gOpenNewSession(){ gOpenSub('journal'); }
 
+// ── Gym 3-Card Navigation ──
+let gCurrentSub = null; // 'overview', 'journal', 'routines' or null (card menu)
+
+function gOpenSub(sub){
+  gCurrentSub = sub;
+  document.getElementById('g-card-menu').style.display='none';
+  ['overview','journal','routines'].forEach(s=>{
+    document.getElementById('g-sub-'+s).style.display=s===sub?'':'none';
+  });
+  document.getElementById('gym-back-btn').textContent='‹ Back';
+  document.getElementById('gym-nav-title').textContent=
+    sub==='overview'?'Overview':sub==='journal'?'Gym Journal':'My Routines';
+  document.getElementById('gym-nav-action').innerHTML=
+    sub==='journal'?'':'';
+  if(sub==='overview'){ gRenderProgress(); }
+  if(sub==='journal'){ gRenderJournalList(); gRenderHistory(); }
+  if(sub==='routines'){ gRenderRoutines(); }
+}
+
+function gBackAction(){
+  if(gCurrentSub){
+    // If logging a session, go back to journal list
+    if(gCurrentSub==='journal' && gSelectedRoutine){
+      gSelectedRoutine=null; gActiveSession=null;
+      gRenderJournalList(); gRenderSessionArea();
+      return;
+    }
+    gCurrentSub=null;
+    document.getElementById('g-card-menu').style.display='';
+    ['overview','journal','routines'].forEach(s=>{
+      document.getElementById('g-sub-'+s).style.display='none';
+    });
+    document.getElementById('gym-back-btn').textContent='‹ Home';
+    document.getElementById('gym-nav-title').textContent='Gym Diary';
+    document.getElementById('gym-nav-action').innerHTML='';
+    gUpdateMenuStats();
+  } else {
+    closePage('gym');
+  }
+}
+
+function gUpdateMenuStats(){
+  const totalSessions = APP.gym.sessions.filter(s=>s.completed).length;
+  const el1=document.getElementById('g-menu-stat-overview');
+  if(el1) el1.innerHTML=`<div class="gym-menu-card-stat-val">${totalSessions}</div><div class="gym-menu-card-stat-lbl">total sessions</div>`;
+  const el2=document.getElementById('g-menu-stat-journal');
+  const thisWeek=APP.gym.sessions.filter(s=>s.completed&&s.date>=fmt(new Date(NOW.getFullYear(),NOW.getMonth(),NOW.getDate()-6))).length;
+  if(el2) el2.innerHTML=`<div class="gym-menu-card-stat-val">${thisWeek}</div><div class="gym-menu-card-stat-lbl">this week</div>`;
+  const el3=document.getElementById('g-menu-stat-routines');
+  if(el3) el3.innerHTML=`<div class="gym-menu-card-stat-val">${APP.gym.routines.length}</div><div class="gym-menu-card-stat-lbl">routines</div>`;
+}
+
+// ── Gym Journal List (replaces day cards) ──
+function gRenderJournalList(){
+  const wrap=document.getElementById('g-journal-list');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  APP.gym.routines.forEach(r=>{
+    const sessions=APP.gym.sessions.filter(s=>s.routineId===r.id&&s.completed);
+    const lastSession=sessions.length?sessions[sessions.length-1]:null;
+    const lastDate=lastSession?lastSession.date:'Never';
+    const isSelected=gSelectedRoutine===r.id;
+    const item=document.createElement('div');
+    item.className='gym-journal-item';
+    if(isSelected) item.style.background='var(--fill)';
+    item.innerHTML=`
+      <div class="gym-journal-emoji">${r.emoji}</div>
+      <div class="gym-journal-info">
+        <div class="gym-journal-name">${r.name}</div>
+        <div class="gym-journal-meta">${sessions.length} sessions · Last: ${lastDate}</div>
+      </div>
+      <div class="gym-journal-arrow">›</div>`;
+    item.onclick=()=>{
+      gSelectedRoutine=r.id;
+      gRenderJournalList();
+      gRenderSessionArea();
+    };
+    wrap.appendChild(item);
+  });
+}
+
+// Keep old gGoTab for compatibility but redirect to new system
 function gGoTab(name,btn){
-  ['today','progress','history','routines'].forEach(t=>{document.getElementById('g-tab-'+t).style.display=t===name?'':'none';});
-  document.querySelectorAll('#page-gym .seg-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); gCurTab=name;
-  if(name==='progress') gRenderProgress();
-  if(name==='history') gRenderHistory();
-  if(name==='routines') gRenderRoutines();
+  if(name==='today') gOpenSub('journal');
+  else if(name==='progress') gOpenSub('overview');
+  else if(name==='history') gOpenSub('journal');
+  else if(name==='routines') gOpenSub('routines');
 }
 
 // ══════════════════════════════════════════════════
@@ -2527,7 +2730,7 @@ function gFinishSession(){
   if(sess){ sess.completed=true; sess.finishedAt=new Date().toISOString(); }
   const sid=gActiveSession.id;
   saveApp(); gActiveSession=null;
-  gRenderDayCards(); gRenderSessionArea(); updateHomeStats();
+  gRenderDayCards(); gRenderJournalList(); gRenderSessionArea(); updateHomeStats();
   setTimeout(()=>gOpenRating(sid),300);
 }
 
@@ -2690,17 +2893,21 @@ function fRenderTransactions(){
 function fDeleteTx(id){
   showDlg('Delete transaction?','This cannot be undone.','Delete', async ()=>{
     APP.finance.transactions=APP.finance.transactions.filter(t=>t.id!==id);
-    // Save locally first
+    // Track deleted ID to prevent re-sync
+    deletedTxIds.add(id);
+    // Save locally
     try{ localStorage.setItem('lifetracker_v1', JSON.stringify(APP)); }catch(e){}
-    // Delete from Supabase immediately (don't wait for debounced sync)
+    // Delete from Supabase immediately with await + retry
     if(currentUser){
-      supa.from('finance_transactions')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .eq('tx_id', id)
-        .then(({error})=>{ if(error) console.warn('Delete sync error:', error); });
+      try {
+        const {error} = await supa.from('finance_transactions')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('tx_id', id);
+        if(error){ console.warn('Delete sync error:', error); }
+      } catch(e){ console.warn('Delete network error:', e); }
     }
-    fRenderAll(); updateFinanceStats();
+    fRenderAll(); updateFinanceStats(); renderWeeklySummary();
   });
 }
 
@@ -2714,7 +2921,7 @@ function fDeleteBudgetCat(cat){
       .eq('cat', cat)
       .then(({error})=>{ if(error) console.warn('Budget delete sync error:', error); });
   }
-  fRenderBudgets();
+  saveApp(); fRenderBudgets();
 }
 
 // ── Edit transaction ──
@@ -3083,17 +3290,21 @@ function smartCategorizeWithMemory(desc){
   return { cat: ruleCat, source: 'rule' };
 }
 
+let _fSaving = false; // Prevent double-tap duplicates
 function fSaveTransaction(){
+  if(_fSaving) return;
   const amt=parseFloat(document.getElementById('f-amount').value);
   if(!amt||amt<=0){document.getElementById('f-amount').focus();return;}
+  _fSaving = true;
   const desc=document.getElementById('f-desc').value.trim();
   const date=document.getElementById('f-date').value||TODAY;
   if(!APP.finance) APP.finance={transactions:[],budgets:{},merchantMemory:{}};
   if(!APP.finance.transactions) APP.finance.transactions=[];
   // Learn this merchant → category mapping
   if(desc) rememberMerchant(desc, fSelCat);
-  APP.finance.transactions.push({id:'tx'+Date.now(),type:fTxType,amount:amt,cat:fSelCat,desc,date});
-  saveApp(); fCloseAdd(); fRenderAll(); updateFinanceStats();
+  APP.finance.transactions.push({id:'tx'+Date.now()+Math.random().toString(36).slice(2,6),type:fTxType,amount:amt,cat:fSelCat,desc,date});
+  saveApp(); fCloseAdd(); fRenderAll(); updateFinanceStats(); renderWeeklySummary();
+  setTimeout(()=>{ _fSaving=false; }, 500);
 }
 
 // ══════════════════════════════════════════════════
@@ -3339,7 +3550,18 @@ function updateFinanceStats(){
 function openPage(name){
   document.getElementById('page-'+name).classList.add('active');
   if(name==='habits'){ hRenderAll(); }
-  if(name==='gym'){ gRenderAll(); }
+  if(name==='gym'){
+    // Reset to card menu view
+    gCurrentSub=null; gSelectedRoutine=null;
+    document.getElementById('g-card-menu').style.display='';
+    ['overview','journal','routines'].forEach(s=>{
+      document.getElementById('g-sub-'+s).style.display='none';
+    });
+    document.getElementById('gym-back-btn').textContent='‹ Home';
+    document.getElementById('gym-nav-title').textContent='Gym Diary';
+    document.getElementById('gym-nav-action').innerHTML='';
+    gRenderAll();
+  }
   if(name==='finance'){
     fRenderAll();
     // Check for pending CommBank transactions
@@ -3534,12 +3756,15 @@ function showSyncError(){
 // ══════════════════════════════════════════════════
 // CLOUD SYNC — debounced, all modules
 // ══════════════════════════════════════════════════
+// Track deleted transaction IDs to prevent re-sync
+let deletedTxIds = new Set();
+
 function saveApp(){
-  // Always save locally first (instant, offline-safe)
+  // Always save locally as cache (instant, offline-safe)
   try{ localStorage.setItem('lifetracker_v1', JSON.stringify(APP)); }catch(e){}
-  // Debounce cloud sync — wait 3 seconds after last change
+  // Immediate cloud sync with short 500ms debounce to batch rapid changes
   if(syncTimeout) clearTimeout(syncTimeout);
-  syncTimeout = setTimeout(syncToCloud, 3000);
+  syncTimeout = setTimeout(syncToCloud, 500);
 }
 
 async function syncToCloud(){
@@ -3553,9 +3778,16 @@ async function syncToCloud(){
     for(const [monthKey, habits] of Object.entries(APP.habits?.monthHabits||{})){
       promises.push(supa.from('month_habits').upsert({ user_id:uid, month_key:monthKey, habits, updated_at:new Date().toISOString() }, { onConflict:'user_id,month_key' }));
     }
-    // Sync habit logs day by day
+    // Sync habit logs day by day (include rest day info in the logs payload)
     for(const [date, logs] of Object.entries(APP.habits?.logs||{})){
-      promises.push(supa.from('habit_logs').upsert({ user_id:uid, date, logs, updated_at:new Date().toISOString() }, { onConflict:'user_id,date' }));
+      const isRestDay = !!(APP.habits?.restDays && APP.habits.restDays[date]);
+      promises.push(supa.from('habit_logs').upsert({ user_id:uid, date, logs: {...logs, _restDay: isRestDay}, updated_at:new Date().toISOString() }, { onConflict:'user_id,date' }));
+    }
+    // Also sync rest days that have no logs yet
+    for(const [date, val] of Object.entries(APP.habits?.restDays||{})){
+      if(val && !APP.habits.logs[date]){
+        promises.push(supa.from('habit_logs').upsert({ user_id:uid, date, logs: {_restDay: true}, updated_at:new Date().toISOString() }, { onConflict:'user_id,date' }));
+      }
     }
     // Sync gym routines
     if(APP.gym?.routines){
@@ -3570,8 +3802,9 @@ async function syncToCloud(){
         finished_at:s.finishedAt||null, updated_at:new Date().toISOString()
       }, { onConflict:'user_id,session_id' }));
     }
-    // Sync finance transactions
+    // Sync finance transactions (skip deleted ones)
     for(const t of APP.finance?.transactions||[]){
+      if(deletedTxIds.has(t.id)) continue;
       promises.push(supa.from('finance_transactions').upsert({
         user_id:uid, tx_id:t.id, type:t.type, amount:t.amount,
         cat:t.cat, description:t.desc||'', date:t.date
@@ -3596,21 +3829,10 @@ async function syncToCloud(){
 // ══════════════════════════════════════════════════
 async function loadFromCloud(uid){
   showSync('Syncing...', '#0A84FF');
+  // Show loading overlay while fetching cloud data
+  showLoadingOverlay();
   try {
-    // Load local data FIRST so UI appears instantly (except finance which always waits for cloud)
-    loadLocal();
-    // Clear local finance data so stale deleted transactions don't flash on screen
-    // Cloud will repopulate — this prevents the "deleted but still shows" bug
-    if(APP.finance) {
-      APP.finance.transactions = [];
-      APP.finance.budgets = {};
-    }
-    initTheme();
-    updateHomeStats();
-    updateFinanceStats();
-    renderWeeklySummary();
-
-    // Then fetch from cloud in background
+    // Fetch ALL data from cloud — cloud is the source of truth
     const [habits, logs, routines, sessions, transactions, budgets, profile] = await Promise.all([
       supa.from('month_habits').select('*').eq('user_id', uid),
       supa.from('habit_logs').select('*').eq('user_id', uid),
@@ -3625,7 +3847,16 @@ async function loadFromCloud(uid){
     (habits.data||[]).forEach(r => { monthHabits[r.month_key] = r.habits; });
 
     const logMap = {};
-    (logs.data||[]).forEach(r => { logMap[r.date] = r.logs; });
+    const restDaysFromCloud = {};
+    (logs.data||[]).forEach(r => {
+      const logData = r.logs || {};
+      // Extract rest day flag from logs
+      if(logData._restDay) restDaysFromCloud[r.date] = true;
+      // Remove the _restDay key from actual logs
+      const cleanLogs = {...logData};
+      delete cleanLogs._restDay;
+      if(Object.keys(cleanLogs).length) logMap[r.date] = cleanLogs;
+    });
 
     const gymRoutines = routines.data?.[0]?.routines || GYM_ROUTINE_DEFAULTS.map(r=>({...r,exercises:r.exercises.map(e=>({...e}))}));
 
@@ -3640,26 +3871,33 @@ async function loadFromCloud(uid){
       cat: r.cat, desc: r.description, date: r.date
     }));
 
+    // Deduplicate transactions by ID (cloud is truth)
+    const txMap = new Map();
+    financeTransactions.forEach(t => txMap.set(t.id, t));
+    const dedupedTransactions = [...txMap.values()];
+
     const financeBudgets = {};
     (budgets.data||[]).forEach(r => { financeBudgets[r.cat] = parseFloat(r.amount); });
 
     const settings = profile.data?.settings || APP.settings || {};
-    const localData = APP; // already loaded locally
+    const localData = APP; // local data loaded at boot for structure defaults
 
-    // Merge — cloud ALWAYS wins (fixes stale local data showing after delete)
+    // Cloud ALWAYS wins — local is only fallback for structure/defaults
     APP = {
       settings,
       habits: {
         monthHabits: Object.keys(monthHabits).length ? monthHabits : (localData?.habits?.monthHabits || { [THIS_MO]: HABIT_DEFAULTS.map(h=>({...h})) }),
-        logs: Object.keys(logMap).length ? logMap : (localData?.habits?.logs || {})
+        logs: Object.keys(logMap).length ? logMap : (localData?.habits?.logs || {}),
+        restDays: Object.keys(restDaysFromCloud).length ? restDaysFromCloud : (localData?.habits?.restDays || {})
       },
       gym: {
         routines: gymRoutines,
-        sessions: gymSessions.length ? gymSessions : (localData?.gym?.sessions || [])
+        sessions: gymSessions.length ? gymSessions : (localData?.gym?.sessions || []),
+        weightLog: localData?.gym?.weightLog || []
       },
       finance: {
-        // Cloud wins for transactions and budgets — if cloud is empty it means user deleted everything
-        transactions: financeTransactions,
+        // Cloud wins for transactions and budgets
+        transactions: dedupedTransactions,
         budgets: financeBudgets,
         merchantMemory: localData?.finance?.merchantMemory || {},
         customCats: localData?.finance?.customCats || [],
@@ -3667,21 +3905,50 @@ async function loadFromCloud(uid){
       }
     };
 
-    // Save merged data locally
+    // Clear deleted IDs set after fresh load
+    deletedTxIds.clear();
+
+    // Save cloud data to local cache
     try{ localStorage.setItem('lifetracker_v1', JSON.stringify(APP)); }catch(e){}
 
-    // Refresh UI silently with cloud data
+    // Refresh ALL UI with cloud data
+    initTheme();
     updateHomeStats();
     updateFinanceStats();
     renderWeeklySummary();
+    hideLoadingOverlay();
     showSynced();
     return true;
 
   } catch(e) {
     console.error('Load error:', e);
+    // Fallback: use local data if cloud fails
+    loadLocal();
+    initTheme();
+    updateHomeStats();
+    updateFinanceStats();
+    renderWeeklySummary();
+    hideLoadingOverlay();
     showSyncError();
     return false;
   }
+}
+
+function showLoadingOverlay(){
+  if(document.getElementById('cloud-loading-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'cloud-loading-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(10,10,15,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;backdrop-filter:blur(8px)';
+  overlay.innerHTML = `
+    <div style="width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--blue);border-radius:50%;animation:ltSpin .7s linear infinite"></div>
+    <div style="font-size:15px;color:rgba(255,255,255,.6);font-weight:500">Loading from cloud...</div>
+    <style>@keyframes ltSpin{to{transform:rotate(360deg)}}</style>`;
+  document.body.appendChild(overlay);
+}
+
+function hideLoadingOverlay(){
+  const el = document.getElementById('cloud-loading-overlay');
+  if(el){ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(), 300); }
 }
 
 function loadLocal(){
@@ -3692,7 +3959,8 @@ function loadLocal(){
   if(!APP.finance) APP.finance={transactions:[],budgets:{},merchantMemory:{},customCats:[],pending:[]};
   if(!APP.settings) APP.settings={};
   if(!APP.gym) APP.gym={routines:GYM_ROUTINE_DEFAULTS.map(r=>({...r,exercises:r.exercises.map(e=>({...e}))})),sessions:[]};
-  if(!APP.habits) APP.habits={monthHabits:{[THIS_MO]:HABIT_DEFAULTS.map(h=>({...h}))},logs:{}};
+  if(!APP.habits) APP.habits={monthHabits:{[THIS_MO]:HABIT_DEFAULTS.map(h=>({...h}))},logs:{},restDays:{}};
+  if(!APP.habits.restDays) APP.habits.restDays={};
 }
 
 function loadApp(){ loadLocal(); }
@@ -3973,11 +4241,12 @@ const cachedUser = (() => {
 })();
 
 if(cachedUser){
-  // Has cached session — show app INSTANTLY
+  // Has cached session — show app shell with loading overlay
   currentUser = cachedUser;
   document.getElementById('page-login').style.display = 'none';
+  // Show minimal UI from local cache while cloud loads
   bootApp();
-  // Then verify + sync with Supabase in background
+  // Verify session + load cloud data as source of truth
   supa.auth.getSession().then(({ data: { session } }) => {
     if(session?.user){
       currentUser = session.user;
