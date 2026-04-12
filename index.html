@@ -307,7 +307,8 @@ body { font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; 
 .sets-header .col-done { width: 36px; }
 
 /* Swipe-to-delete set row */
-.set-row-wrap { position: relative; overflow: hidden; border-radius: 8px; margin: 3px 0; }
+.set-block { margin: 3px 0; }
+.set-row-wrap-inner { position: relative; overflow: hidden; border-radius: 8px; }
 .set-delete-bg { position: absolute; right: 0; top: 0; bottom: 0; width: 72px; background: var(--red); display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 600; border-radius: 0 8px 8px 0; }
 .set-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; background: var(--surface); border-radius: 8px; transform: translateX(0); transition: transform .2s ease; position: relative; z-index: 1; touch-action: pan-y; }
 .set-row.swiped { transform: translateX(-72px); }
@@ -333,6 +334,13 @@ canvas.chart { width: 100%; height: 120px; }
 .overload-up { background: rgba(52,199,89,.12); color: var(--green); }
 .overload-down { background: rgba(255,59,48,.1); color: var(--red); }
 .overload-same { background: var(--fill); color: var(--label2); }
+
+/* Rest day essential star toggle */
+.rest-essential-btn { font-size:20px; color:var(--label3); padding:4px 8px; cursor:pointer; flex-shrink:0; line-height:1; transition:color .15s; }
+.rest-essential-btn.on { color:var(--orange); }
+
+/* Last session hint */
+.ex-last-hint { font-size: 10px; color: var(--blue); margin-top: 2px; font-weight: 500; }
 
 /* RIR selector */
 .rir-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; }
@@ -619,7 +627,7 @@ body.light .rest-day-toggle { background:#fff; }
 .gym-menu-card:active { transform:scale(.97); opacity:.85; }
 .gym-menu-card-icon { font-size:32px; margin-bottom:10px; }
 .gym-menu-card-title { font-size:20px; font-weight:700; letter-spacing:-.4px; margin-bottom:4px; }
-.gym-menu-card-sub { font-size:13px; color:var(--label2); line-height:1.4; }
+.gym-menu-card-sub { font-size:13px; color:var(--label2); line-height:1.4; padding-right:60px; }
 .gym-menu-card-arrow { position:absolute; top:20px; right:18px; color:var(--label3); font-size:20px; }
 .gym-menu-card-stat { position:absolute; bottom:18px; right:18px; text-align:right; }
 .gym-menu-card-stat-val { font-size:22px; font-weight:700; color:var(--blue); }
@@ -876,19 +884,19 @@ body.light .gym-menu-card { background:#fff; }
   <!-- Card Menu (main gym view) -->
   <div class="page-scroll no-tab" id="g-card-menu">
     <div class="gym-card-menu">
-      <div class="gym-menu-card" onclick="gOpenSub('overview')">
-        <div class="gym-menu-card-icon">📊</div>
-        <div class="gym-menu-card-title">Overview</div>
-        <div class="gym-menu-card-sub">Weekly volume, exercise progress, body weight tracking</div>
-        <div class="gym-menu-card-arrow">›</div>
-        <div class="gym-menu-card-stat" id="g-menu-stat-overview"></div>
-      </div>
       <div class="gym-menu-card" onclick="gOpenSub('journal')">
         <div class="gym-menu-card-icon">📝</div>
         <div class="gym-menu-card-title">Gym Journal</div>
         <div class="gym-menu-card-sub">Log workouts, view session history</div>
         <div class="gym-menu-card-arrow">›</div>
         <div class="gym-menu-card-stat" id="g-menu-stat-journal"></div>
+      </div>
+      <div class="gym-menu-card" onclick="gOpenSub('overview')">
+        <div class="gym-menu-card-icon">📊</div>
+        <div class="gym-menu-card-title">Overview</div>
+        <div class="gym-menu-card-sub">Weekly volume, exercise progress, body weight tracking</div>
+        <div class="gym-menu-card-arrow">›</div>
+        <div class="gym-menu-card-stat" id="g-menu-stat-overview"></div>
       </div>
       <div class="gym-menu-card" onclick="gOpenSub('routines')">
         <div class="gym-menu-card-icon">⚙️</div>
@@ -993,7 +1001,6 @@ body.light .gym-menu-card { background:#fff; }
   <div class="page-scroll no-tab" id="f-tab-overview">
     <div id="f-balance-hero"></div>
     <div class="sec" style="margin-top:14px"><div class="sec-hdr">Spending by Category</div><div class="card" id="f-pie-card"></div></div>
-    <div class="sec"><div class="sec-hdr">Recent</div><div class="card" id="f-recent-list"></div></div>
     <div style="height:20px"></div>
   </div>
 
@@ -1436,8 +1443,23 @@ function hAllDoneStreak(){
 }
 
 // ── Rest Day ──
-// Essential habits are the first 3 in the list (user can reorder to prioritize)
-const REST_DAY_ESSENTIAL_COUNT = 3;
+// Essential habits on rest days — stored as array of habit IDs in APP.habits.essentialHabits
+function hGetEssentialIds(){
+  const h=hGetMonthHabits(NOW.getFullYear(),NOW.getMonth());
+  if(APP.habits?.essentialHabits?.length) return APP.habits.essentialHabits;
+  // Default: first 3 habits
+  return h.slice(0,3).map(x=>x.id);
+}
+function hToggleEssential(habitId){
+  if(!APP.habits.essentialHabits){
+    const h=hGetMonthHabits(NOW.getFullYear(),NOW.getMonth());
+    APP.habits.essentialHabits=h.slice(0,3).map(x=>x.id);
+  }
+  const idx=APP.habits.essentialHabits.indexOf(habitId);
+  if(idx>=0) APP.habits.essentialHabits.splice(idx,1);
+  else APP.habits.essentialHabits.push(habitId);
+  saveApp(); hRenderToday(); updateHomeStats();
+}
 
 function hIsRestDay(ds){
   return !!(APP.habits?.restDays && APP.habits.restDays[ds]);
@@ -1454,12 +1476,12 @@ function hToggleRestDay(){
 }
 
 function hGetActiveHabits(ds){
-  // Returns habits that should count for a given day
   const d = new Date(ds+'T12:00:00');
   const h = hGetMonthHabits(d.getFullYear(), d.getMonth());
   if(hIsRestDay(ds)){
-    // On rest days, only the first N habits are "expected"
-    return h.slice(0, Math.min(REST_DAY_ESSENTIAL_COUNT, h.length));
+    const essIds=hGetEssentialIds();
+    const ess=h.filter(x=>essIds.includes(x.id));
+    return ess.length?ess:h.slice(0,3);
   }
   return h;
 }
@@ -1492,35 +1514,41 @@ function hRenderToday(){
   const sub=document.getElementById('h-restDaySub');
   if(toggle){ toggle.classList.toggle('active', isRest); }
   if(sw){ sw.classList.toggle('on', isRest); }
-  if(sub){ sub.textContent=isRest?`Only ${Math.min(REST_DAY_ESSENTIAL_COUNT,h.length)} essential habits today`:'Mark today as a rest day'; }
-  document.getElementById('h-habitListHdr').textContent=isRest?'Essential Habits':'My Habits';
+  const essIds=hGetEssentialIds();
+  const essCount=h.filter(x=>essIds.includes(x.id)).length;
+  if(sub){ sub.textContent=isRest?`${essCount} essential · tap ★ to change`:'Mark today as a rest day'; }
+  document.getElementById('h-habitListHdr').textContent=isRest?'Habits (Rest Day)':'My Habits';
 
   const list=document.getElementById('h-habitList');
   if(!h.length){list.innerHTML=`<div class="empty"><div class="empty-ico">✅</div><div class="empty-h">No habits yet</div><div class="empty-p">Tap + to add your first habit.</div></div>`;return;}
   list.innerHTML='';
 
-  // Show all habits but visually de-emphasize non-essential on rest days
-  h.forEach((hb, idx)=>{
+  // Split into essential and optional when rest day is active
+  const essentialHabits=isRest?h.filter(x=>essIds.includes(x.id)):h;
+  const optionalHabits=isRest?h.filter(x=>!essIds.includes(x.id)):[];
+
+  const renderHabit=(hb,isEssential)=>{
     const isDone=!!log[hb.id], s=hHabitStreak(hb.id);
-    const isEssential = !isRest || idx < REST_DAY_ESSENTIAL_COUNT;
     const row=document.createElement('div'); row.className='habit-row';
-    if(!isEssential) row.style.opacity='0.4';
-    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}${!isEssential?' <span style="font-size:11px;color:var(--label3)">(optional)</span>':''}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>`;
+    if(isRest&&!isEssential) row.style.opacity='0.45';
+    const starBtn=isRest?`<div class="rest-essential-btn ${isEssential?'on':''}" onclick="event.stopPropagation();hToggleEssential('${hb.id}')" title="${isEssential?'Mark optional':'Mark essential'}">${isEssential?'★':'☆'}</div>`:'';
+    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>${starBtn}`;
     row.addEventListener('click',()=>{
       const wasOff=!hGetLog(TODAY)[hb.id]; hToggleLog(TODAY,hb.id);
       if(wasOff){const cb=document.getElementById('hck_'+hb.id);if(cb){cb.classList.add('on','pop');setTimeout(()=>cb.classList.remove('pop'),300);}setTimeout(()=>{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();},150);}
       else{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();}
     });
     list.appendChild(row);
-  });
+  };
 
-  // Add separator before optional habits on rest days
-  if(isRest && h.length > REST_DAY_ESSENTIAL_COUNT){
+  essentialHabits.forEach(hb=>renderHabit(hb,true));
+
+  if(isRest&&optionalHabits.length){
     const sep=document.createElement('div');
-    sep.style.cssText='padding:8px 16px;font-size:11px;color:var(--label3);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px';
-    sep.textContent='Optional today';
-    const rows=list.children;
-    if(rows[REST_DAY_ESSENTIAL_COUNT]) list.insertBefore(sep, rows[REST_DAY_ESSENTIAL_COUNT]);
+    sep.style.cssText='padding:8px 16px;font-size:11px;color:var(--orange);font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px;display:flex;align-items:center;gap:6px';
+    sep.innerHTML='<span>🛌</span> Optional today — tap ★ to make essential';
+    list.appendChild(sep);
+    optionalHabits.forEach(hb=>renderHabit(hb,false));
   }
 }
 
@@ -1844,6 +1872,14 @@ function gRenderSessionArea(){
       const isUnilateral=!!(gActiveSession.unilateral&&gActiveSession.unilateral[ex.id]);
       const overload=gGetOverload(ex.id);
       const sidesCol=isUnilateral?'<div class="col-sides">SIDES</div>':'';
+      // Last session hint
+      const prevSessForHint=APP.gym.sessions.filter(s=>s.completed&&s.exercises&&s.exercises[ex.id]&&!(s.skipped&&s.skipped[ex.id])).slice(-1)[0];
+      let lastHint='';
+      if(prevSessForHint){
+        const pSets=prevSessForHint.exercises[ex.id]||[];
+        const pDone=pSets.filter(s=>s.reps&&s.weight);
+        if(pDone.length) lastHint=`<div class="ex-last-hint">Last: ${pDone.map(s=>`${s.reps}×${s.weight}kg`).join(' · ')}</div>`;
+      }
 
       html+=`<div class="ex-card fade-up ${isSkipped?'skipped':''}" id="excard-${ex.id}">
         <div class="ex-header" onclick="gToggleExercise('${ex.id}')">
@@ -1851,6 +1887,7 @@ function gRenderSessionArea(){
           <div class="ex-info">
             <div class="ex-name">${ex.name}</div>
             <div class="ex-meta">${ex.sets}×${ex.reps}${isUnilateral?' · each side':''}</div>
+            ${lastHint}
           </div>
           ${isSkipped?'<div class="skipped-badge">⏭ Skipped</div>':overload}
           <div class="ex-chevron ${isSkipped?'':''}">›</div>
@@ -1874,14 +1911,16 @@ function gRenderSessionArea(){
             </div>
             <div id="sets-list-${ex.id}">
             ${sessEx.map((set,i)=>{const rir=set.rir!=null?set.rir:2;return`
-              <div class="set-row-wrap" id="setwrap-${ex.id}-${i}">
-                <div class="set-delete-bg" onclick="gDeleteSet('${ex.id}',${i})">Delete</div>
-                <div class="set-row" id="setrow-${ex.id}-${i}">
-                  <div class="set-num">${i+1}</div>
-                  <input class="set-input" type="number" inputmode="numeric" placeholder="${ex.reps}" value="${set.reps||''}" onchange="gUpdateSet('${ex.id}',${i},'reps',this.value)" onclick="this.select()">
-                  <input class="set-input" type="number" inputmode="decimal" placeholder="kg" value="${set.weight||''}" onchange="gUpdateSet('${ex.id}',${i},'weight',this.value)" onclick="this.select()">
-                  ${isUnilateral?`<div class="set-sides">L+R</div>`:''}
-                  <div class="set-check ${set.done?'done':''}" onclick="gToggleSet('${ex.id}',${i})"><svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="set-block" id="setwrap-${ex.id}-${i}">
+                <div class="set-row-wrap-inner">
+                  <div class="set-delete-bg" onclick="gDeleteSet('${ex.id}',${i})">Delete</div>
+                  <div class="set-row" id="setrow-${ex.id}-${i}">
+                    <div class="set-num">${i+1}</div>
+                    <input class="set-input" type="number" inputmode="numeric" placeholder="${ex.reps}" value="${set.reps||''}" onchange="gUpdateSet('${ex.id}',${i},'reps',this.value)" onclick="this.select()">
+                    <input class="set-input" type="number" inputmode="decimal" placeholder="kg" value="${set.weight||''}" onchange="gUpdateSet('${ex.id}',${i},'weight',this.value)" onclick="this.select()">
+                    ${isUnilateral?`<div class="set-sides">L+R</div>`:''}
+                    <div class="set-check ${set.done?'done':''}" onclick="gToggleSet('${ex.id}',${i})"><svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                  </div>
                 </div>
                 <div class="rir-row">
                   <div class="rir-label">RIR</div>
@@ -1931,7 +1970,7 @@ function gInitSwipe(){
   });
   // Tap outside to close any swiped
   document.addEventListener('touchstart', e=>{
-    if(!e.target.closest('.set-row-wrap')){
+    if(!e.target.closest('.set-block')){
       document.querySelectorAll('.set-row.swiped').forEach(r=>r.classList.remove('swiped'));
     }
   },{passive:true});
@@ -2988,13 +3027,6 @@ function fRenderOverview(){
     </div>
   </div>`;
 
-  // Recent transactions — shared with transactions tab, fully editable
-  const recent=(APP.finance?.transactions||[]).slice(-8).reverse();
-  const recList=document.getElementById('f-recent-list');
-  if(!recent.length){recList.innerHTML=`<div class="empty" style="padding:20px"><div class="empty-h">No transactions</div></div>`;return;}
-  recList.innerHTML='';
-  recent.forEach(tx=>{ recList.appendChild(fMakeTxRow(tx)); });
-  fAttachSwipe(recList);
 }
 
 // Shared transaction row builder used by BOTH overview and transactions tab
@@ -3135,25 +3167,6 @@ function fRenderBudgets(){
   const list=document.getElementById('f-budget-list');list.innerHTML='';
   const budgets=APP.finance?.budgets||{};
   const txs=fGetMonthTx(NOW.getFullYear(),NOW.getMonth());
-
-  // Custom categories section
-  const customCats=APP.finance?.customCats||[];
-  if(customCats.length){
-    const hdr=document.createElement('div');
-    hdr.style.cssText='font-size:13px;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;padding:12px 4px 8px';
-    hdr.textContent='My Categories';
-    list.appendChild(hdr);
-    customCats.forEach(cat=>{
-      const el=document.createElement('div');
-      el.className='budget-row';
-      el.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:8px';
-      el.innerHTML=`<div style="font-size:26px">${cat.emoji}</div><div style="flex:1"><div style="font-size:15px;font-weight:600">${cat.label}</div><div style="width:20px;height:5px;border-radius:3px;background:${cat.color};margin-top:4px"></div></div><button onclick="fOpenCustomCat('${cat.id}')" style="background:var(--fill);border:none;color:var(--blue);border-radius:8px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Edit</button><button onclick="fDeleteCustomCat('${cat.id}')" style="background:rgba(255,69,58,.12);border:none;color:var(--red);border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer;font-family:inherit">✕</button>`;
-      list.appendChild(el);
-    });
-    const div=document.createElement('div');
-    div.style.cssText='height:1px;background:var(--sep);margin:4px 0 12px';
-    list.appendChild(div);
-  }
 
   if(!Object.keys(budgets).length){
     const empty=document.createElement('div');
