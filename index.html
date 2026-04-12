@@ -3790,16 +3790,15 @@ function handleDeepLink() {
     const type = params.get('type') || 'expense';
     const cat = params.get('cat') || smartCategorize(desc);
 
-    if (!amount) return;
-
     // Clear hash so it doesn't trigger again on reload
     history.replaceState(null, '', window.location.pathname);
 
-    // Open finance page with pre-filled data
+    // Open finance page — pre-fill if amount given, else just open Add form
     setTimeout(() => {
       openPage('finance');
       setTimeout(() => {
-        fOpenAddPrefilled({ amount, desc, type, cat });
+        if(amount) fOpenAddPrefilled({ amount, desc, type, cat });
+        else fOpenAdd();
       }, 400);
     }, 600);
 
