@@ -334,6 +334,21 @@ canvas.chart { width: 100%; height: 120px; }
 .overload-down { background: rgba(255,59,48,.1); color: var(--red); }
 .overload-same { background: var(--fill); color: var(--label2); }
 
+/* RIR selector */
+.rir-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; }
+.rir-label { font-size: 10px; font-weight: 700; color: var(--label3); text-transform: uppercase; letter-spacing: .4px; width: 26px; flex-shrink: 0; }
+.rir-btns { display: flex; gap: 4px; }
+.rir-btn { width: 30px; height: 26px; border-radius: 7px; background: var(--fill); border: 1px solid var(--sep-solid); font-size: 12px; font-weight: 700; color: var(--label2); text-align: center; line-height: 26px; cursor: pointer; transition: all .15s; flex-shrink: 0; }
+.rir-btn.active { background: var(--accent, var(--blue)); border-color: transparent; color: #fff; }
+/* Session feedback banner */
+.session-feedback-banner { background: rgba(52,199,89,.1); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; text-align: center; }
+.session-feedback-banner .sfb-main { font-size: 15px; font-weight: 700; color: var(--green); }
+.session-feedback-banner .sfb-sub { font-size: 12px; color: var(--label2); margin-top: 3px; }
+.session-feedback-banner.neutral { background: var(--fill); }
+.session-feedback-banner.neutral .sfb-main { color: var(--label); }
+.session-feedback-banner.warn { background: rgba(255,159,10,.1); }
+.session-feedback-banner.warn .sfb-main { color: var(--orange, #FF9F0A); }
+
 /* Session history */
 .history-row { padding: 12px 16px; position: relative; cursor: pointer; }
 .history-row:active { background: var(--fill2); }
@@ -1178,6 +1193,7 @@ body.light .gym-menu-card { background:#fff; }
   <div class="sheet-handle"></div>
   <div class="sheet-title">Session Complete! 🎉</div>
   <div class="sheet-body">
+    <div id="g-session-feedback" style="display:none"></div>
     <div style="text-align:center;margin-bottom:20px">
       <div style="font-size:14px;color:var(--label2);margin-bottom:12px">How did you feel?</div>
       <div id="g-stars" style="display:flex;justify-content:center;gap:10px;font-size:36px"></div>
@@ -1857,7 +1873,7 @@ function gRenderSessionArea(){
               <div class="col-done"></div>
             </div>
             <div id="sets-list-${ex.id}">
-            ${sessEx.map((set,i)=>`
+            ${sessEx.map((set,i)=>{const rir=set.rir!=null?set.rir:2;return`
               <div class="set-row-wrap" id="setwrap-${ex.id}-${i}">
                 <div class="set-delete-bg" onclick="gDeleteSet('${ex.id}',${i})">Delete</div>
                 <div class="set-row" id="setrow-${ex.id}-${i}">
@@ -1867,7 +1883,13 @@ function gRenderSessionArea(){
                   ${isUnilateral?`<div class="set-sides">L+R</div>`:''}
                   <div class="set-check ${set.done?'done':''}" onclick="gToggleSet('${ex.id}',${i})"><svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                 </div>
-              </div>`).join('')}
+                <div class="rir-row">
+                  <div class="rir-label">RIR</div>
+                  <div class="rir-btns">
+                    ${[0,1,2,3,4].map(v=>`<div class="rir-btn${rir===v?' active':''}" onclick="gUpdateSet('${ex.id}',${i},'rir',${v});this.parentNode.querySelectorAll('.rir-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">${v}</div>`).join('')}
+                  </div>
+                </div>
+              </div>`}).join('')}
             </div>
             <button class="add-set-btn" onclick="gAddSet('${ex.id}')">+ Add set</button>
           </div>
@@ -1915,7 +1937,7 @@ function gInitSwipe(){
   },{passive:true});
 }
 
-function gInitSets(n){ return Array.from({length:n},()=>({reps:'',weight:'',done:false})); }
+function gInitSets(n){ return Array.from({length:n},()=>({reps:'',weight:'',done:false,rir:2})); }
 
 // Toggle skip
 function gToggleSkip(exId){
@@ -1954,21 +1976,46 @@ function gDeleteSet(exId, idx){
   setTimeout(()=>{ gToggleExercise(exId); },30);
 }
 
+// ── RIR / Adjusted Strength Helpers ──
+function calcAdjustedStrength(reps, weight, rir){
+  if(!reps||!weight) return 0;
+  const effortMap = {0:1.0, 1:0.9, 2:0.8, 3:0.7, 4:0.6};
+  const effort = (rir!=null && effortMap[rir]!=null) ? effortMap[rir] : 0.8;
+  const orm = parseFloat(weight) * (1 + parseFloat(reps)/30);
+  return Math.round(orm * effort * 10) / 10;
+}
+function calcSessionAdjStrength(sets, multiplier){
+  const m = multiplier||1;
+  const vals = (sets||[]).filter(s=>s.done&&s.reps&&s.weight)
+    .map(s=>calcAdjustedStrength(s.reps, s.weight, s.rir!=null?s.rir:2)*m);
+  return vals.length ? Math.max(...vals) : 0;
+}
+function calcSessionAvgRIR(sets){
+  const done=(sets||[]).filter(s=>s.done&&s.reps&&s.weight&&s.rir!=null);
+  if(!done.length) return null;
+  return done.reduce((a,s)=>a+(s.rir),0)/done.length;
+}
+
 function gGetOverload(exId){
-  // Only count sessions where this exercise was NOT skipped
   const sessions=APP.gym.sessions.filter(s=>s.completed&&s.exercises&&s.exercises[exId]&&!(s.skipped&&s.skipped[exId]));
   if(sessions.length<1) return '';
-  const last=sessions[sessions.length-1].exercises[exId];
-  const isUnilateral=!!(sessions[sessions.length-1].unilateral&&sessions[sessions.length-1].unilateral[exId]);
-  const mult=isUnilateral?2:1;
-  const lastVol=last.reduce((a,s)=>{const r=parseFloat(s.reps)||0,w=parseFloat(s.weight)||0;return a+(r*w*mult);},0);
   if(sessions.length<2) return `<div class="overload-badge overload-same">📊 First log</div>`;
-  const prev=sessions[sessions.length-2].exercises[exId];
-  const prevMult=!!(sessions[sessions.length-2].unilateral&&sessions[sessions.length-2].unilateral[exId])?2:1;
-  const prevVol=prev.reduce((a,s)=>{const r=parseFloat(s.reps)||0,w=parseFloat(s.weight)||0;return a+(r*w*prevMult);},0);
-  if(lastVol>prevVol) return `<div class="overload-badge overload-up">⬆ +${Math.round(lastVol-prevVol)}kg vol</div>`;
-  if(lastVol<prevVol) return `<div class="overload-badge overload-down">⬇ -${Math.round(prevVol-lastVol)}kg vol</div>`;
-  return `<div class="overload-badge overload-same">= Same volume</div>`;
+  const lastSess=sessions[sessions.length-1];
+  const prevSess=sessions[sessions.length-2];
+  const lastMult=(lastSess.unilateral&&lastSess.unilateral[exId])?2:1;
+  const prevMult=(prevSess.unilateral&&prevSess.unilateral[exId])?2:1;
+  const lastStr=calcSessionAdjStrength(lastSess.exercises[exId],lastMult);
+  const prevStr=calcSessionAdjStrength(prevSess.exercises[exId],prevMult);
+  if(prevStr===0) return `<div class="overload-badge overload-same">📊 First log</div>`;
+  const delta=(lastStr-prevStr)/prevStr*100;
+  if(delta>1) return `<div class="overload-badge overload-up">⬆ +${delta.toFixed(1)}% stronger</div>`;
+  if(delta<-1) return `<div class="overload-badge overload-down">⬇ ${delta.toFixed(1)}% weaker</div>`;
+  // Same strength — check if RIR was lower (harder effort)
+  const lastRIR=calcSessionAvgRIR(lastSess.exercises[exId]);
+  const prevRIR=calcSessionAvgRIR(prevSess.exercises[exId]);
+  if(lastRIR!=null&&prevRIR!=null&&lastRIR<prevRIR-0.4)
+    return `<div class="overload-badge overload-up">🔥 Trained harder</div>`;
+  return `<div class="overload-badge overload-same">= Same level</div>`;
 }
 
 function gToggleExercise(exId){
@@ -2024,7 +2071,7 @@ function gToggleSet(exId,idx){
 function gAddSet(exId){
   if(!gActiveSession) return;
   if(!gActiveSession.exercises[exId]) gActiveSession.exercises[exId]=[];
-  gActiveSession.exercises[exId].push({reps:'',weight:'',done:false});
+  gActiveSession.exercises[exId].push({reps:'',weight:'',done:false,rir:2});
   const sess=APP.gym.sessions.find(s=>s.id===gActiveSession.id);
   if(sess) sess.exercises[exId]=gActiveSession.exercises[exId];
   saveApp(); gRenderSessionArea();
@@ -2071,34 +2118,42 @@ function gRenderProgress(){
       const showAll=!!gProgressShowAll[ex.id];
       const displaySess=showAll?sessWithEx:[...sessWithEx].slice(-3);
 
-      // Build chart points from all sessions (for the line graph)
+      // Build chart points using adjusted strength
       const allPoints=sessWithEx.map(s=>{
         const sets=s.exercises[ex.id]||[];
         const mult=(s.unilateral&&s.unilateral[ex.id])?2:1;
+        const adjStr=calcSessionAdjStrength(sets,mult);
         const maxW=Math.max(...sets.map(st=>parseFloat(st.weight)||0),0);
         const totalVol=sets.reduce((a,st)=>a+(parseFloat(st.reps)||0)*(parseFloat(st.weight)||0)*mult,0);
-        return{date:s.date,maxW,totalVol,id:s.id};
+        const avgRIR=calcSessionAvgRIR(sets);
+        return{date:s.date,adjStr,maxW,totalVol,avgRIR,id:s.id};
       });
 
-      const lastMax=allPoints[allPoints.length-1]?.maxW||0;
-      const allMax=Math.max(...allPoints.map(p=>p.maxW));
-      const isPR=lastMax===allMax&&lastMax>0&&allPoints.length>1;
+      const lastAdj=allPoints[allPoints.length-1]?.adjStr||0;
+      const allAdjMax=Math.max(...allPoints.map(p=>p.adjStr));
+      const isPR=lastAdj>0&&lastAdj===allAdjMax&&allPoints.length>1;
       let trend='';
       if(allPoints.length>=2){
-        const diff=allPoints[allPoints.length-1].maxW-allPoints[allPoints.length-2].maxW;
-        if(diff>0) trend=`<div class="overload-badge overload-up">⬆ +${diff}kg</div>`;
-        else if(diff<0) trend=`<div class="overload-badge overload-down">⬇ ${diff}kg</div>`;
-        else trend=`<div class="overload-badge overload-same">= Same</div>`;
+        const last2=allPoints[allPoints.length-1];
+        const prev2=allPoints[allPoints.length-2];
+        if(prev2.adjStr>0){
+          const d2=(last2.adjStr-prev2.adjStr)/prev2.adjStr*100;
+          if(d2>1) trend=`<div class="overload-badge overload-up">⬆ +${d2.toFixed(1)}%</div>`;
+          else if(d2<-1) trend=`<div class="overload-badge overload-down">⬇ ${d2.toFixed(1)}%</div>`;
+          else if(last2.avgRIR!=null&&prev2.avgRIR!=null&&last2.avgRIR<prev2.avgRIR-0.4)
+            trend=`<div class="overload-badge overload-up">🔥 Harder</div>`;
+          else trend=`<div class="overload-badge overload-same">= Same</div>`;
+        }
       }
 
-      // SVG line chart
+      // SVG line chart (Y = adjusted strength)
       const W=280,H=70,pad=10;
       const pts2=allPoints.map((p,i)=>{
-        const maxV=Math.max(...allPoints.map(x=>x.maxW),1);
-        const minV=Math.min(...allPoints.map(x=>x.maxW));
+        const maxV=Math.max(...allPoints.map(x=>x.adjStr),1);
+        const minV=Math.min(...allPoints.map(x=>x.adjStr));
         const range=maxV-minV||1;
         const x=pad+(i/(Math.max(allPoints.length-1,1)))*(W-2*pad);
-        const y=H-pad-((p.maxW-minV)/range)*(H-2*pad);
+        const y=H-pad-((p.adjStr-minV)/range)*(H-2*pad);
         return{x,y,p};
       });
       const pathD=pts2.map((pt,i)=>i===0?`M${pt.x},${pt.y}`:`L${pt.x},${pt.y}`).join(' ');
@@ -2109,17 +2164,18 @@ function gRenderProgress(){
         const d=new Date(s.date);
         const sets=s.exercises[ex.id]||[];
         const mult=(s.unilateral&&s.unilateral[ex.id])?2:1;
+        const adjStr=calcSessionAdjStrength(sets,mult);
         const maxW=Math.max(...sets.map(st=>parseFloat(st.weight)||0),0);
         const vol=sets.reduce((a,st)=>a+(parseFloat(st.reps)||0)*(parseFloat(st.weight)||0)*mult,0);
-        const doneStr=sets.filter(st=>st.done).map((st,i)=>`${i+1}: ${st.reps||'—'}×${st.weight||'—'}kg`).join(' · ')||'No sets done';
+        const doneStr=sets.filter(st=>st.done).map((st,j)=>`${j+1}: ${st.reps||'—'}×${st.weight||'—'}kg${st.rir!=null?' R'+st.rir:''}`).join(' · ')||'No sets done';
         return `<div style="padding:8px 16px;border-top:1px solid var(--sep);display:flex;align-items:center;gap:10px">
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;color:var(--label2)">${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}</div>
             <div style="font-size:11px;color:var(--label3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${doneStr}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:14px;font-weight:700;color:var(--blue)">${maxW>0?maxW+'kg':'—'}</div>
-            <div style="font-size:10px;color:var(--label3)">${Math.round(vol)>0?Math.round(vol)+'kg vol':''}</div>
+            <div style="font-size:14px;font-weight:700;color:var(--blue)">${adjStr>0?adjStr+' str':'—'}</div>
+            <div style="font-size:10px;color:var(--label3)">${maxW>0?maxW+'kg max':''}</div>
           </div>
         </div>`;
       }).join('');
@@ -2136,8 +2192,8 @@ function gRenderProgress(){
         <div class="ex-header" style="cursor:default">
           <div class="ex-icon" style="background:var(--fill)">📈</div>
           <div class="ex-info">
-            <div class="ex-name">${ex.name}${isPR?' <span class="pr-badge">PR</span>':''}</div>
-            <div class="ex-meta">Max: ${lastMax>0?lastMax+'kg':'—'} · ${sessWithEx.length} sessions</div>
+            <div class="ex-name">${ex.name}${isPR?' <span class="pr-badge">🏆 PR</span>':''}</div>
+            <div class="ex-meta">Adj.str: ${lastAdj>0?lastAdj:'—'} · ${sessWithEx.length} sessions</div>
           </div>
           ${trend}
         </div>
@@ -2698,10 +2754,107 @@ function renderWeeklySummary(){
 // ══════════════════════════════════════════════════
 let gRatingSessionId=null, gCurrentRating=0;
 
+function gBuildSessionFeedback(session){
+  if(!session) return null;
+  // Gather all exercises in this session with done sets
+  const exIds=Object.keys(session.exercises||{});
+  let totalAdjStr=0, exCount=0;
+  let allRIRs=[];
+  exIds.forEach(exId=>{
+    if(session.skipped&&session.skipped[exId]) return;
+    const sets=session.exercises[exId]||[];
+    const mult=(session.unilateral&&session.unilateral[exId])?2:1;
+    const adj=calcSessionAdjStrength(sets,mult);
+    if(adj>0){totalAdjStr+=adj;exCount++;}
+    const avgR=calcSessionAvgRIR(sets);
+    if(avgR!=null) allRIRs.push(avgR);
+  });
+  if(!exCount) return null;
+  const avgAdjStr=totalAdjStr/exCount;
+  const avgRIR=allRIRs.length?allRIRs.reduce((a,v)=>a+v,0)/allRIRs.length:null;
+
+  // Find previous completed session of same routine
+  const prev=APP.gym.sessions.filter(s=>s.completed&&s.routineId===session.routineId&&s.id!==session.id)
+    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+
+  // Check plateau (3+ sessions no improvement)
+  const sameRoutineSess=APP.gym.sessions.filter(s=>s.completed&&s.routineId===session.routineId&&s.id!==session.id)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  const recentSess=sameRoutineSess.slice(-3);
+  let plateauCount=0;
+  if(recentSess.length>=2){
+    for(let i=1;i<recentSess.length;i++){
+      const pStr=Object.keys(recentSess[i-1].exercises||{}).reduce((a,exId)=>{
+        if(recentSess[i-1].skipped&&recentSess[i-1].skipped[exId])return a;
+        const m=(recentSess[i-1].unilateral&&recentSess[i-1].unilateral[exId])?2:1;
+        return a+calcSessionAdjStrength(recentSess[i-1].exercises[exId]||[],m);
+      },0);
+      const cStr=Object.keys(recentSess[i].exercises||{}).reduce((a,exId)=>{
+        if(recentSess[i].skipped&&recentSess[i].skipped[exId])return a;
+        const m=(recentSess[i].unilateral&&recentSess[i].unilateral[exId])?2:1;
+        return a+calcSessionAdjStrength(recentSess[i].exercises[exId]||[],m);
+      },0);
+      if(Math.abs(cStr-pStr)/(pStr||1)<0.01) plateauCount++;
+    }
+  }
+
+  if(!prev){
+    return {cls:'neutral',main:'First session logged!',sub:'Keep going — data builds over time.'};
+  }
+  const prevExIds=Object.keys(prev.exercises||{});
+  let prevTotalAdj=0,prevExCount=0;
+  prevExIds.forEach(exId=>{
+    if(prev.skipped&&prev.skipped[exId])return;
+    const sets=prev.exercises[exId]||[];
+    const mult=(prev.unilateral&&prev.unilateral[exId])?2:1;
+    const adj=calcSessionAdjStrength(sets,mult);
+    if(adj>0){prevTotalAdj+=adj;prevExCount++;}
+  });
+  const prevAvgAdj=prevExCount?prevTotalAdj/prevExCount:0;
+  const delta=prevAvgAdj>0?(avgAdjStr-prevAvgAdj)/prevAvgAdj*100:0;
+
+  if(plateauCount>=2){
+    return{cls:'warn',main:'Plateau detected 📉',sub:'3 sessions at same level. Try adding weight or reps.'};
+  }
+  if(delta>1){
+    const sub=avgRIR!=null&&avgRIR<=1.5?'High effort session 🔥':'Great work, keep the momentum.';
+    return{cls:'',main:`+${delta.toFixed(1)}% stronger than last session 💪`,sub};
+  }
+  if(delta<-1){
+    const sub='Could be fatigue or lighter effort — not a problem.';
+    return{cls:'warn',main:`${delta.toFixed(1)}% vs last session`,sub};
+  }
+  // Same strength — check effort
+  if(avgRIR!=null){
+    const prevAllRIRs=[];
+    prevExIds.forEach(exId=>{
+      if(prev.skipped&&prev.skipped[exId])return;
+      const r=calcSessionAvgRIR(prev.exercises[exId]||[]);
+      if(r!=null)prevAllRIRs.push(r);
+    });
+    const prevAvgRIR=prevAllRIRs.length?prevAllRIRs.reduce((a,v)=>a+v,0)/prevAllRIRs.length:null;
+    if(prevAvgRIR!=null&&avgRIR<prevAvgRIR-0.4){
+      return{cls:'',main:'Same strength, higher effort 🔥',sub:`Avg RIR ${avgRIR.toFixed(1)} vs ${prevAvgRIR.toFixed(1)} last time.`};
+    }
+  }
+  if(avgRIR!=null&&avgRIR<=2){
+    return{cls:'',main:'Solid session 💪',sub:`High effort (avg RIR ${avgRIR.toFixed(1)}) — well done.`};
+  }
+  return{cls:'neutral',main:'Consistent performance',sub:'Same level as last session. Push for more next time.'};
+}
+
 function gOpenRating(sessionId){
   gRatingSessionId=sessionId; gCurrentRating=0;
   document.getElementById('g-session-note').value='';
   renderStars(0);
+  // Show session feedback
+  const fbEl=document.getElementById('g-session-feedback');
+  const sess=APP.gym.sessions.find(s=>s.id===sessionId);
+  const fb=sess?gBuildSessionFeedback(sess):null;
+  if(fb&&fbEl){
+    fbEl.style.display='';
+    fbEl.innerHTML=`<div class="session-feedback-banner ${fb.cls||''}"><div class="sfb-main">${fb.main}</div><div class="sfb-sub">${fb.sub}</div></div>`;
+  } else if(fbEl){ fbEl.style.display='none'; }
   document.getElementById('g-rating-bd').classList.add('on');
   document.getElementById('g-rating-sheet').classList.add('on');
 }
