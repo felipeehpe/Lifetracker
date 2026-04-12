@@ -3862,9 +3862,19 @@ async function loadFromCloud(uid){
       if(Object.keys(cleanLogs).length) logMap[r.date] = cleanLogs;
     });
 
-    const gymRoutines = routines.data?.[0]?.routines || GYM_ROUTINE_DEFAULTS.map(r=>({...r,exercises:r.exercises.map(e=>({...e}))}));
+    // ONE-TIME GYM RESET: wipe old routines & sessions, use new defaults
+    const GYM_RESET_KEY = 'lt_gym_reset_v12b';
+    if(!localStorage.getItem(GYM_RESET_KEY)){
+      localStorage.setItem(GYM_RESET_KEY, '1');
+      // Delete old gym data from cloud
+      await supa.from('gym_routines').delete().eq('user_id', uid);
+      await supa.from('gym_sessions').delete().eq('user_id', uid);
+      console.log('GYM RESET: cleared old routines & sessions');
+    }
+    const gymResetDone = !!localStorage.getItem(GYM_RESET_KEY);
+    const gymRoutines = gymResetDone ? GYM_ROUTINE_DEFAULTS.map(r=>({...r,exercises:r.exercises.map(e=>({...e}))})) : (routines.data?.[0]?.routines || GYM_ROUTINE_DEFAULTS.map(r=>({...r,exercises:r.exercises.map(e=>({...e}))})));
 
-    const gymSessions = (sessions.data||[]).map(r => ({
+    const gymSessions = gymResetDone ? [] : (sessions.data||[]).map(r => ({
       id: r.session_id, routineId: r.routine_id, date: r.date,
       exercises: r.exercises||{}, skipped: r.skipped||{}, unilateral: r.unilateral||{},
       completed: r.completed, rating: r.rating, note: r.note, finishedAt: r.finished_at
