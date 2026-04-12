@@ -3175,11 +3175,6 @@ function fRenderBudgets(){
     list.appendChild(empty);
     return;
   }
-  const hdr2=document.createElement('div');
-  hdr2.style.cssText='font-size:13px;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;padding:0 4px 8px';
-  hdr2.textContent='Monthly Budgets';
-  list.appendChild(hdr2);
-
   Object.entries(budgets).forEach(([catId,limit])=>{
     const cat=fGetCat(catId);
     const spent=txs.filter(t=>t.type==='expense'&&t.cat===catId).reduce((a,t)=>a+t.amount,0);
