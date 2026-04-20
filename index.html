@@ -198,6 +198,7 @@ body { font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; 
 .day-hdr { display: flex; gap: 2px; padding-left: 94px; margin-bottom: 5px; }
 .dnum { width: 20px; text-align: center; font-size: 9px; color: var(--label3); font-weight: 500; flex-shrink: 0; }
 .dnum.is-today { color: var(--blue); font-weight: 700; }
+.dnum[onclick]:active { background: var(--fill); border-radius: 6px; }
 .crow { display: flex; align-items: center; gap: 2px; margin-bottom: 3px; }
 .crow-lbl { width: 92px; font-size: 11px; color: var(--label2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; padding-right: 6px; }
 .cdot { width: 20px; height: 20px; border-radius: 5px; flex-shrink: 0; cursor: pointer; transition: transform .1s; }
@@ -865,6 +866,7 @@ body.light .gym-menu-card { background:#fff; }
       <div class="card" id="h-streakCard"></div>
     </div>
     <div class="sec" style="margin-top:14px"><div class="sec-hdr">Overview</div><div class="card" id="h-pieCard"></div></div>
+    <div class="sec" style="margin-top:14px"><div class="sec-hdr">Habit Radar</div><div class="card" id="h-radarCard"></div></div>
     <div class="sec"><div class="sec-hdr">Per Habit</div><div class="card" id="h-anList"></div></div>
     <div style="height:16px"></div>
   </div>
@@ -1022,6 +1024,7 @@ body.light .gym-menu-card { background:#fff; }
   <div class="page-scroll no-tab" id="f-tab-budgets" style="display:none">
     <div class="sec" style="margin-top:16px"><div class="sec-hdr">Monthly Budgets</div><div id="f-budget-list"></div></div>
     <div class="sec"><button class="ios-btn btn-s" onclick="fOpenBudget()">+ Set Budget</button></div>
+    <div class="sec" id="f-custom-cats-sec" style="display:none"><div class="sec-hdr">My Categories</div><div class="card" id="f-custom-cats-list"></div></div>
     <div style="height:20px"></div>
   </div>
 </div>
@@ -1150,6 +1153,13 @@ body.light .gym-menu-card { background:#fff; }
 </div>
 
 <!-- Edit Transaction Sheet -->
+<div class="backdrop" id="h-dayedit-bd" onclick="hCloseDayEdit()"></div>
+<div class="sheet" id="h-dayedit-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="h-dayedit-title">Edit Day</div>
+  <div class="sheet-body" id="h-dayedit-body" style="max-height:60vh;overflow-y:auto"></div>
+</div>
+
 <div class="backdrop" id="f-edit-bd" onclick="fCloseEditTx()"></div>
 <div class="sheet" id="f-edit-sheet">
   <div class="sheet-handle"></div>
@@ -1572,7 +1582,7 @@ function hRenderCalendar(){
   }
   banner.innerHTML='';
   let html='<div class="day-hdr">';
-  for(let d=1;d<=days;d++){const ds=dsOf(hvY,hvM,d);html+=`<div class="dnum ${ds===TODAY?'is-today':''}">${d}</div>`;}
+  for(let d=1;d<=days;d++){const ds=dsOf(hvY,hvM,d);const isFut=ds>TODAY;html+=`<div class="dnum ${ds===TODAY?'is-today':''}" ${!isFut?`onclick="hOpenDayEdit('${ds}')"`:''}style="${!isFut?'cursor:pointer':''}">${d}</div>`;}
   html+='</div>';
   h.forEach(hb=>{
     html+=`<div class="crow"><div class="crow-lbl">${hb.emoji} ${hb.name}</div>`;
@@ -1618,8 +1628,52 @@ function hRenderAnalysis(){
     row.innerHTML=`<div class="an-emoji">${hb.emoji}</div><div class="an-text"><div class="an-name">${hb.name}</div><div class="an-bar-bg"><div class="an-bar" style="width:${pct}%;background:${col}"></div></div></div><div class="an-pct" style="color:${col}">${tot?pct+'%':'—'}</div>`;
     al.appendChild(row);
   });
+  // Radar chart
+  hRenderRadar(stats);
   // Render streak calendar after analysis
   hRenderStreakCalendar();
+}
+
+function hRenderRadar(stats){
+  const el=document.getElementById('h-radarCard'); if(!el)return;
+  if(!stats||stats.length<2){el.innerHTML='<div class="empty" style="padding:24px 0"><div class="empty-ico">🕸️</div><div class="empty-h">Need 2+ habits</div></div>';return;}
+  const N=stats.length, cx=140, cy=140, R=100, size=280;
+  const angles=stats.map((_,i)=>( (i/N)*2*Math.PI - Math.PI/2 ));
+  // grid rings
+  let svg=`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="display:block;margin:0 auto">`;
+  [0.25,0.5,0.75,1].forEach(r=>{
+    const pts=angles.map(a=>`${cx+R*r*Math.cos(a)},${cy+R*r*Math.sin(a)}`).join(' ');
+    svg+=`<polygon points="${pts}" fill="none" stroke="var(--sep)" stroke-width="1"/>`;
+  });
+  // axes
+  angles.forEach(a=>{
+    svg+=`<line x1="${cx}" y1="${cy}" x2="${cx+R*Math.cos(a)}" y2="${cy+R*Math.sin(a)}" stroke="var(--sep)" stroke-width="1"/>`;
+  });
+  // data polygon
+  const dataPts=stats.map(({pct},i)=>{
+    const r=(pct/100)*R;
+    return `${cx+r*Math.cos(angles[i])},${cy+r*Math.sin(angles[i])}`;
+  }).join(' ');
+  svg+=`<polygon points="${dataPts}" fill="rgba(10,132,255,0.18)" stroke="var(--blue)" stroke-width="2"/>`;
+  // dots + labels
+  stats.forEach(({hb,pct},i)=>{
+    const r=(pct/100)*R;
+    const dx=cx+r*Math.cos(angles[i]), dy=cy+r*Math.sin(angles[i]);
+    svg+=`<circle cx="${dx}" cy="${dy}" r="4" fill="var(--blue)"/>`;
+    // label at axis tip
+    const lx=cx+(R+18)*Math.cos(angles[i]), ly=cy+(R+18)*Math.sin(angles[i]);
+    const anchor=Math.cos(angles[i])>0.1?'start':Math.cos(angles[i])<-0.1?'end':'middle';
+    svg+=`<text x="${lx}" y="${ly+4}" text-anchor="${anchor}" font-size="11" fill="var(--label2)" font-family="-apple-system,sans-serif">${hb.emoji}</text>`;
+  });
+  svg+='</svg>';
+  // legend
+  svg+=`<div style="display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 16px 4px;justify-content:center">`;
+  stats.forEach(({hb,pct})=>{
+    const col=pct>=80?'var(--green)':pct>=50?'var(--orange)':'var(--red)';
+    svg+=`<div style="display:flex;align-items:center;gap:4px;font-size:11px"><span>${hb.emoji}</span><span style="color:var(--label2)">${hb.name}</span><span style="color:${col};font-weight:700">${pct}%</span></div>`;
+  });
+  svg+='</div>';
+  el.innerHTML=svg;
 }
 
 // ── Habit tab switch ──
@@ -1638,6 +1692,37 @@ function hCopyPrevMonth(){
   const prevH=hGetMonthHabits(py,pm); if(!prevH.length)return;
   APP.habits.monthHabits[moKey(hvY,hvM)]=prevH.map(h=>({...h,id:'h'+Date.now()+Math.random().toString(36).slice(2)}));
   saveApp(); hRenderCalendar(); hRenderAnalysis(); hRenderToday();
+}
+
+// ── Past day edit ──
+function hOpenDayEdit(ds){
+  if(ds>TODAY) return; // no editing future
+  const h=hGetMonthHabits(parseInt(ds.slice(0,4)),parseInt(ds.slice(5,7))-1);
+  if(!h.length) return;
+  const log=hGetLog(ds);
+  const d=new Date(ds+'T12:00:00');
+  const label=`${WDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${parseInt(ds.slice(8))}`;
+  document.getElementById('h-dayedit-title').textContent=label;
+  const body=document.getElementById('h-dayedit-body');
+  body.innerHTML='';
+  h.forEach(hb=>{
+    const isDone=!!log[hb.id];
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--sep);cursor:pointer';
+    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hde_${hb.id}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div style="font-size:18px">${hb.emoji}</div><div style="font-size:15px;font-weight:500;${isDone?'text-decoration:line-through;color:var(--label2)':''}">${hb.name}</div>`;
+    row.onclick=()=>{
+      hToggleLog(ds,hb.id);
+      hOpenDayEdit(ds); // re-render
+      hRenderCalendar(); hRenderToday(); hRenderAnalysis(); updateHomeStats();
+    };
+    body.appendChild(row);
+  });
+  document.getElementById('h-dayedit-bd').classList.add('on');
+  document.getElementById('h-dayedit-sheet').classList.add('on');
+}
+function hCloseDayEdit(){
+  document.getElementById('h-dayedit-bd').classList.remove('on');
+  document.getElementById('h-dayedit-sheet').classList.remove('on');
 }
 
 // ── Habit sheets ──
@@ -3192,6 +3277,7 @@ function fSaveEditTx(){
 }
 
 function fRenderBudgets(){
+  fRenderCustomCatsList();
   const list=document.getElementById('f-budget-list');list.innerHTML='';
   const budgets=APP.finance?.budgets||{};
   const txs=fGetMonthTx(NOW.getFullYear(),NOW.getMonth());
@@ -3234,7 +3320,22 @@ function fRenderBudgets(){
 function fDeleteCustomCat(id){
   showDlg('Delete category?','Transactions will keep their existing data.','Delete',()=>{
     APP.finance.customCats=(APP.finance.customCats||[]).filter(c=>c.id!==id);
-    saveApp(); fRenderBudgets();
+    saveApp(); fRenderBudgets(); fRenderCustomCatsList();
+  });
+}
+
+function fRenderCustomCatsList(){
+  const sec=document.getElementById('f-custom-cats-sec');
+  const list=document.getElementById('f-custom-cats-list');
+  if(!sec||!list) return;
+  const cats=APP.finance?.customCats||[];
+  sec.style.display=cats.length?'':'none';
+  list.innerHTML='';
+  cats.forEach(cat=>{
+    const el=document.createElement('div');
+    el.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--sep)';
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:12px"><div style="font-size:24px">${cat.emoji}</div><div style="font-size:15px;font-weight:500">${cat.label}</div></div><div style="display:flex;gap:16px"><span style="font-size:14px;color:var(--blue);font-weight:600;cursor:pointer" onclick="fOpenCustomCat('${cat.id}')">Edit</span><span style="font-size:14px;color:var(--red);font-weight:600;cursor:pointer" onclick="fDeleteCustomCat('${cat.id}')">Delete</span></div>`;
+    list.appendChild(el);
   });
 }
 
@@ -3663,6 +3764,7 @@ function fSaveCustomCat(){
   saveApp(); fCloseCustomCat();
   fRenderCatGrid('f-cat-grid');
   fRenderBudgetCatGrid();
+  fRenderCustomCatsList();
   fRenderAll();
 }
 
