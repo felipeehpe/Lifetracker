@@ -4068,21 +4068,15 @@ async function loadFromCloud(uid){
       completed: r.completed, rating: r.rating, note: r.note, finishedAt: r.finished_at
     }));
 
-    const cloudTransactions = (transactions.data||[]).map(r => ({
+    const financeTransactions = (transactions.data||[]).map(r => ({
       id: r.tx_id, type: r.type, amount: parseFloat(r.amount),
-      cat: r.cat, desc: r.description, date: r.date, updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0
+      cat: r.cat, desc: r.description, date: r.date
     }));
 
-    // Merge: cloud base, but local wins if newer updatedAt and not in deletedTxIds
+    // Cloud is always truth — deduplicate by ID only
     const txMap = new Map();
-    cloudTransactions.forEach(t => txMap.set(t.id, t));
-    const localTxs = localData?.finance?.transactions || [];
-    localTxs.forEach(t => {
-      if(deletedTxIds.has(t.id)) return;
-      const cloud = txMap.get(t.id);
-      if(!cloud || (t.updatedAt && t.updatedAt > (cloud.updatedAt||0))) txMap.set(t.id, t);
-    });
-    const dedupedTransactions = [...txMap.values()].filter(t => !deletedTxIds.has(t.id));
+    financeTransactions.forEach(t => txMap.set(t.id, t));
+    const dedupedTransactions = [...txMap.values()];
 
     const financeBudgets = {};
     (budgets.data||[]).forEach(r => { financeBudgets[r.cat] = parseFloat(r.amount); });
