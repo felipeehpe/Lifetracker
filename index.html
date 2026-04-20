@@ -338,6 +338,7 @@ canvas.chart { width: 100%; height: 120px; }
 /* Rest day essential star toggle */
 .rest-essential-btn { font-size:20px; color:var(--label3); padding:4px 8px; cursor:pointer; flex-shrink:0; line-height:1; transition:color .15s; }
 .rest-essential-btn.on { color:var(--orange); }
+.rest-move-btn { font-size:18px; color:var(--blue); padding:4px 10px; cursor:pointer; flex-shrink:0; line-height:1; font-weight:700; }
 
 /* Last session hint */
 .ex-last-hint { font-size: 10px; color: var(--blue); margin-top: 2px; font-weight: 500; }
@@ -1516,23 +1517,24 @@ function hRenderToday(){
   if(sw){ sw.classList.toggle('on', isRest); }
   const essIds=hGetEssentialIds();
   const essCount=h.filter(x=>essIds.includes(x.id)).length;
-  if(sub){ sub.textContent=isRest?`${essCount} essential · tap ★ to change`:'Mark today as a rest day'; }
+  if(sub){ sub.textContent=isRest?`${essCount} mandatory · tap arrows to move`:'Mark today as a rest day'; }
   document.getElementById('h-habitListHdr').textContent=isRest?'Habits (Rest Day)':'My Habits';
 
   const list=document.getElementById('h-habitList');
   if(!h.length){list.innerHTML=`<div class="empty"><div class="empty-ico">✅</div><div class="empty-h">No habits yet</div><div class="empty-p">Tap + to add your first habit.</div></div>`;return;}
   list.innerHTML='';
 
-  // Split into essential and optional when rest day is active
-  const essentialHabits=isRest?h.filter(x=>essIds.includes(x.id)):h;
+  // Split into mandatory and optional when rest day is active
+  const mandatoryHabits=isRest?h.filter(x=>essIds.includes(x.id)):h;
   const optionalHabits=isRest?h.filter(x=>!essIds.includes(x.id)):[];
 
-  const renderHabit=(hb,isEssential)=>{
+  const renderHabit=(hb,isMandatory)=>{
     const isDone=!!log[hb.id], s=hHabitStreak(hb.id);
     const row=document.createElement('div'); row.className='habit-row';
-    if(isRest&&!isEssential) row.style.opacity='0.45';
-    const starBtn=isRest?`<div class="rest-essential-btn ${isEssential?'on':''}" onclick="event.stopPropagation();hToggleEssential('${hb.id}')" title="${isEssential?'Mark optional':'Mark essential'}">${isEssential?'★':'☆'}</div>`:'';
-    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>${starBtn}`;
+    if(isRest&&!isMandatory) row.style.opacity='0.45';
+    // move button: down arrow for mandatory (move to optional), up arrow for optional (move to mandatory)
+    const moveBtn=isRest?`<div class="rest-move-btn" onclick="event.stopPropagation();hToggleEssential('${hb.id}')" title="${isMandatory?'Move to Optional':'Move to Mandatory'}">${isMandatory?'↓':'↑'}</div>`:'';
+    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>${moveBtn}`;
     row.addEventListener('click',()=>{
       const wasOff=!hGetLog(TODAY)[hb.id]; hToggleLog(TODAY,hb.id);
       if(wasOff){const cb=document.getElementById('hck_'+hb.id);if(cb){cb.classList.add('on','pop');setTimeout(()=>cb.classList.remove('pop'),300);}setTimeout(()=>{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();},150);}
@@ -1541,12 +1543,18 @@ function hRenderToday(){
     list.appendChild(row);
   };
 
-  essentialHabits.forEach(hb=>renderHabit(hb,true));
+  if(isRest){
+    const mandHdr=document.createElement('div');
+    mandHdr.style.cssText='padding:6px 16px 2px;font-size:11px;color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:.5px';
+    mandHdr.textContent='Mandatory';
+    list.appendChild(mandHdr);
+  }
+  mandatoryHabits.forEach(hb=>renderHabit(hb,true));
 
   if(isRest&&optionalHabits.length){
     const sep=document.createElement('div');
-    sep.style.cssText='padding:8px 16px;font-size:11px;color:var(--orange);font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px;display:flex;align-items:center;gap:6px';
-    sep.innerHTML='<span>🛌</span> Optional today — tap ★ to make essential';
+    sep.style.cssText='padding:8px 16px 2px;font-size:11px;color:var(--orange);font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:6px';
+    sep.innerHTML='🛌 Optional';
     list.appendChild(sep);
     optionalHabits.forEach(hb=>renderHabit(hb,false));
   }
@@ -2068,6 +2076,9 @@ function gToggleExercise(exId){
 
 function gStartSession(){
   if(!gSelectedRoutine)return;
+  // guard: don't create duplicate session for same routine+date
+  const existing=APP.gym.sessions.find(s=>s.routineId===gSelectedRoutine&&s.date===TODAY&&!s.completed);
+  if(existing){ gActiveSession=existing; gRenderSessionArea(); return; }
   const routine=APP.gym.routines.find(r=>r.id===gSelectedRoutine);
   const sess={id:'sess'+Date.now(),routineId:gSelectedRoutine,date:TODAY,completed:false,exercises:{}};
   routine.exercises.forEach(ex=>{ sess.exercises[ex.id]=gInitSets(ex.sets); });
@@ -2089,6 +2100,9 @@ function gUpdateSet(exId,idx,field,val){
   if(!gActiveSession.exercises[exId]) gActiveSession.exercises[exId]=[];
   if(!gActiveSession.exercises[exId][idx]) gActiveSession.exercises[exId][idx]={reps:'',weight:'',done:false};
   gActiveSession.exercises[exId][idx][field]=val;
+  // auto-mark done when both reps and weight filled
+  const s=gActiveSession.exercises[exId][idx];
+  if((field==='reps'||field==='weight')&&s.reps&&s.weight) s.done=true;
   // sync to stored session
   const sess=APP.gym.sessions.find(s=>s.id===gActiveSession.id);
   if(sess) sess.exercises[exId]=gActiveSession.exercises[exId];
@@ -3071,11 +3085,24 @@ function fAttachSwipe(container){
 
 function fRenderTransactions(){
   document.getElementById('f-txMonthLabel').textContent=`${MONTHS[fvM]} ${fvY}`;
-  const txs=fGetMonthTx(fvY,fvM).reverse();
+  const txs=fGetMonthTx(fvY,fvM).sort((a,b)=>b.date.localeCompare(a.date));
   const list=document.getElementById('f-tx-list');
   if(!txs.length){list.innerHTML=`<div class="empty"><div class="empty-ico">📋</div><div class="empty-h">No transactions</div><div class="empty-p">No transactions for this month.</div></div>`;return;}
   list.innerHTML='';
-  txs.forEach(tx=>{ list.appendChild(fMakeTxRow(tx)); });
+  // group by date
+  const groups={};
+  txs.forEach(tx=>{ if(!groups[tx.date]) groups[tx.date]=[]; groups[tx.date].push(tx); });
+  Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([date,dayTxs])=>{
+    const dayTotal=dayTxs.reduce((s,t)=>s+(t.type==='expense'?-t.amount:t.amount),0);
+    const [,mm,dd]=date.split('-');
+    const d=new Date(date+'T12:00:00');
+    const label=`${WDAYS[d.getDay()]}, ${MONTHS[parseInt(mm)-1]} ${parseInt(dd)}`;
+    const hdr=document.createElement('div');
+    hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px';
+    hdr.innerHTML=`<span>${label}</span><span style="color:${dayTotal>=0?'var(--green)':'var(--red)'}">${dayTotal>=0?'+':''}$${Math.abs(dayTotal).toFixed(2)}</span>`;
+    list.appendChild(hdr);
+    dayTxs.forEach(tx=>{ list.appendChild(fMakeTxRow(tx)); });
+  });
   fAttachSwipe(list);
 }
 
@@ -3159,6 +3186,7 @@ function fSaveEditTx(){
   tx.date=document.getElementById('f-edit-date').value||TODAY;
   tx.cat=fEditSelCat;
   tx.type=fEditType;
+  tx.updatedAt=Date.now();
   if(tx.desc) rememberMerchant(tx.desc, fEditSelCat);
   saveApp(); fCloseEditTx(); fRenderAll(); updateFinanceStats();
 }
@@ -3467,7 +3495,7 @@ function fSaveTransaction(){
   if(!APP.finance.transactions) APP.finance.transactions=[];
   // Learn this merchant → category mapping
   if(desc) rememberMerchant(desc, fSelCat);
-  APP.finance.transactions.push({id:'tx'+Date.now()+Math.random().toString(36).slice(2,6),type:fTxType,amount:amt,cat:fSelCat,desc,date});
+  APP.finance.transactions.push({id:'tx'+Date.now()+Math.random().toString(36).slice(2,6),type:fTxType,amount:amt,cat:fSelCat,desc,date,updatedAt:Date.now()});
   saveApp(); fCloseAdd(); fRenderAll(); updateFinanceStats(); renderWeeklySummary();
   setTimeout(()=>{ _fSaving=false; }, 500);
 }
@@ -4040,15 +4068,21 @@ async function loadFromCloud(uid){
       completed: r.completed, rating: r.rating, note: r.note, finishedAt: r.finished_at
     }));
 
-    const financeTransactions = (transactions.data||[]).map(r => ({
+    const cloudTransactions = (transactions.data||[]).map(r => ({
       id: r.tx_id, type: r.type, amount: parseFloat(r.amount),
-      cat: r.cat, desc: r.description, date: r.date
+      cat: r.cat, desc: r.description, date: r.date, updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0
     }));
 
-    // Deduplicate transactions by ID (cloud is truth)
+    // Merge: cloud base, but local wins if newer updatedAt and not in deletedTxIds
     const txMap = new Map();
-    financeTransactions.forEach(t => txMap.set(t.id, t));
-    const dedupedTransactions = [...txMap.values()];
+    cloudTransactions.forEach(t => txMap.set(t.id, t));
+    const localTxs = localData?.finance?.transactions || [];
+    localTxs.forEach(t => {
+      if(deletedTxIds.has(t.id)) return;
+      const cloud = txMap.get(t.id);
+      if(!cloud || (t.updatedAt && t.updatedAt > (cloud.updatedAt||0))) txMap.set(t.id, t);
+    });
+    const dedupedTransactions = [...txMap.values()].filter(t => !deletedTxIds.has(t.id));
 
     const financeBudgets = {};
     (budgets.data||[]).forEach(r => { financeBudgets[r.cat] = parseFloat(r.amount); });
