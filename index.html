@@ -3291,18 +3291,29 @@ function fRenderBudgets(){
     list.appendChild(empty);
     return;
   }
-  Object.entries(budgets).forEach(([catId,limit])=>{
+  // apply user-defined order
+  const catOrder = APP.finance?.catOrder || [];
+  const catIds = Object.keys(budgets);
+  const ordered = [
+    ...catOrder.filter(id => catIds.includes(id)),
+    ...catIds.filter(id => !catOrder.includes(id))
+  ];
+
+  ordered.forEach((catId, idx)=>{
+    const limit=budgets[catId];
     const cat=fGetCat(catId);
     const spent=txs.filter(t=>t.type==='expense'&&t.cat===catId).reduce((a,t)=>a+t.amount,0);
     const pct=Math.min(spent/limit*100,100);
-    // bar uses cat color, pct text warns when near limit
     const pctColor=pct>=90?'var(--red)':pct>=70?'var(--orange)':cat.color;
     const el=document.createElement('div');
     el.className='budget-row';
-    el.style.cursor='pointer';
     el.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <button onclick="event.stopPropagation();fMoveBudgetCat('${catId}',-1)" style="background:none;border:none;color:${idx===0?'var(--sep)':'var(--label2)'};font-size:13px;cursor:pointer;padding:0;line-height:1;${idx===0?'pointer-events:none':''}">▲</button>
+            <button onclick="event.stopPropagation();fMoveBudgetCat('${catId}',1)" style="background:none;border:none;color:${idx===ordered.length-1?'var(--sep)':'var(--label2)'};font-size:13px;cursor:pointer;padding:0;line-height:1;${idx===ordered.length-1?'pointer-events:none':''}">▼</button>
+          </div>
           <div style="font-size:24px;width:40px;height:40px;border-radius:10px;background:${cat.color}22;border:2px solid ${cat.color}55;display:flex;align-items:center;justify-content:center">${cat.emoji}</div>
           <div>
             <div style="font-size:15px;font-weight:600">${cat.label}</div>
@@ -3311,13 +3322,31 @@ function fRenderBudgets(){
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-size:14px;font-weight:700;color:${pctColor}">${Math.round(pct)}%</div>
-          <div style="font-size:13px;color:var(--blue);font-weight:600">Edit</div>
+          <div style="font-size:13px;color:var(--blue);font-weight:600;cursor:pointer" onclick="event.stopPropagation();fOpenBudget('${catId}',${limit})">Edit</div>
         </div>
       </div>
       <div class="budget-bar-bg"><div class="budget-bar-fill" style="width:${pct}%;background:${cat.color}"></div></div>`;
-    el.onclick=()=>fOpenBudget(catId, limit);
     list.appendChild(el);
   });
+}
+
+function fMoveBudgetCat(catId, dir){
+  const budgetIds = Object.keys(APP.finance?.budgets||{});
+  const catOrder = APP.finance?.catOrder || [];
+  // build full ordered list
+  const ordered = [
+    ...catOrder.filter(id=>budgetIds.includes(id)),
+    ...budgetIds.filter(id=>!catOrder.includes(id))
+  ];
+  const idx = ordered.indexOf(catId);
+  if(idx===-1) return;
+  const newIdx = idx+dir;
+  if(newIdx<0||newIdx>=ordered.length) return;
+  ordered.splice(idx,1);
+  ordered.splice(newIdx,0,catId);
+  if(!APP.finance) APP.finance={};
+  APP.finance.catOrder=ordered;
+  saveApp(); fRenderBudgets();
 }
 
 function fDeleteCustomCat(id){
@@ -4231,6 +4260,7 @@ async function loadFromCloud(uid){
         merchantMemory: localData?.finance?.merchantMemory || {},
         customCats: localData?.finance?.customCats || [],
         catColors: localData?.finance?.catColors || {},
+        catOrder: localData?.finance?.catOrder || [],
         pending: localData?.finance?.pending || []
       }
     };
