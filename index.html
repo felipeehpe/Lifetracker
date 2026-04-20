@@ -1144,6 +1144,8 @@ body.light .gym-menu-card { background:#fff; }
   <div class="sheet-body">
     <div class="field-lbl">Category</div>
     <div id="f-budget-cat-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px"></div>
+    <div class="field-lbl">Category Color</div>
+    <div id="f-budget-color-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
     <div class="field-lbl">Monthly Budget ($)</div>
     <input class="ios-input" id="f-budget-amount" type="number" inputmode="decimal" placeholder="0.00" style="-webkit-user-select:text;user-select:text">
     <button class="ios-btn btn-p" onclick="fSaveBudget()">Save Budget</button>
@@ -3700,7 +3702,9 @@ function fGetAllCats(){
   return [...F_CATS, ...(APP.finance?.customCats||[])];
 }
 function fGetCat(id){
-  return fGetAllCats().find(c=>c.id===id) || F_CATS[F_CATS.length-1];
+  const base = fGetAllCats().find(c=>c.id===id) || F_CATS[F_CATS.length-1];
+  const override = APP.finance?.catColors?.[base.id];
+  return override ? {...base, color: override} : base;
 }
 
 function fOpenCustomCat(editId=null){
@@ -3790,18 +3794,33 @@ function fRenderCatGrid(containerId){
 }
 
 // ── Budget open/save/delete ──
-let fEditingBudgetCat=null;
+let fEditingBudgetCat=null, fBudgetSelColor=null;
 
 function fOpenBudget(catId=null, existingAmount=null){
   fTxType='expense';
   fEditingBudgetCat=catId;
   fSelCat=catId||'food';
+  fBudgetSelColor=catId ? fGetCat(catId).color : null;
   document.getElementById('f-budget-amount').value=existingAmount?existingAmount.toFixed(2):'';
   document.getElementById('f-budget-title').textContent=catId?'Edit Budget':'Set Budget';
   document.getElementById('f-budget-delete-btn').style.display=catId?'block':'none';
   fRenderBudgetCatGrid();
+  fRenderBudgetColorGrid();
   document.getElementById('f-budget-bd').classList.add('on');
   document.getElementById('f-budget-sheet').classList.add('on');
+}
+
+function fRenderBudgetColorGrid(){
+  const g=document.getElementById('f-budget-color-grid'); if(!g) return;
+  g.innerHTML='';
+  const currentColor = fBudgetSelColor || fGetCat(fSelCat).color;
+  CAT_COLORS.forEach(color=>{
+    const btn=document.createElement('div');
+    const sel=color===currentColor;
+    btn.style.cssText=`width:34px;height:34px;border-radius:50%;background:${color};cursor:pointer;border:3px solid ${sel?'white':'transparent'};box-sizing:border-box;transition:transform .12s;flex-shrink:0`;
+    btn.onclick=()=>{ fBudgetSelColor=color; fRenderBudgetColorGrid(); };
+    g.appendChild(btn);
+  });
 }
 function fCloseBudget(){
   document.getElementById('f-budget-bd').classList.remove('on');
@@ -3813,7 +3832,7 @@ function fRenderBudgetCatGrid(){
     const btn=document.createElement('div');
     btn.className='f-cat-btn'+(fSelCat===cat.id?' sel':'');
     btn.innerHTML=`<div class="f-cat-btn-ico">${cat.emoji}</div><div class="f-cat-btn-lbl">${cat.label}</div>`;
-    btn.onclick=()=>{fSelCat=cat.id;fRenderBudgetCatGrid();};
+    btn.onclick=()=>{ fSelCat=cat.id; fBudgetSelColor=fGetCat(cat.id).color; fRenderBudgetCatGrid(); fRenderBudgetColorGrid(); };
     g.appendChild(btn);
   });
 }
@@ -3822,7 +3841,12 @@ function fSaveBudget(){
   if(!amt||amt<=0) return;
   if(!APP.finance.budgets) APP.finance.budgets={};
   APP.finance.budgets[fSelCat]=amt;
-  saveApp(); fCloseBudget(); fRenderBudgets();
+  // save color override if changed
+  if(fBudgetSelColor){
+    if(!APP.finance.catColors) APP.finance.catColors={};
+    APP.finance.catColors[fSelCat]=fBudgetSelColor;
+  }
+  saveApp(); fCloseBudget(); fRenderBudgets(); fRenderTransactions();
 }
 function fDeleteBudget(){
   showDlg('Delete budget?',`Remove the budget for ${fGetCat(fSelCat).label}?`,'Delete',()=>{
@@ -4206,6 +4230,7 @@ async function loadFromCloud(uid){
         budgets: financeBudgets,
         merchantMemory: localData?.finance?.merchantMemory || {},
         customCats: localData?.finance?.customCats || [],
+        catColors: localData?.finance?.catColors || {},
         pending: localData?.finance?.pending || []
       }
     };
