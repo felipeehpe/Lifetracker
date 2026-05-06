@@ -5288,6 +5288,64 @@ supa.auth.onAuthStateChange(async (event, session) => {
 });
 
 window.addEventListener('hashchange', handleDeepLink);
+
+// ══════════════════════════════════════════════════
+// PWA RELIABILITY: cloud-first, refresh on resume
+// ══════════════════════════════════════════════════
+let _lastCloudLoad = Date.now();
+const CLOUD_REFRESH_MS = 5 * 60 * 1000; // 5 min
+
+// When app becomes visible again, verify session + reload cloud if stale
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState !== 'visible') return;
+  if(!currentUser) return;
+  const stale = Date.now() - _lastCloudLoad > CLOUD_REFRESH_MS;
+  if(!stale) return;
+  try {
+    const { data: { session } } = await supa.auth.getSession();
+    if(session?.user){
+      currentUser = session.user;
+      _lastCloudLoad = Date.now();
+      loadFromCloud(currentUser.id);
+    } else {
+      // Try refresh
+      const { data: { session: s2 } } = await supa.auth.refreshSession();
+      if(s2?.user){
+        currentUser = s2.user;
+        _lastCloudLoad = Date.now();
+        loadFromCloud(currentUser.id);
+      }
+    }
+  } catch(e){ console.warn('Resume sync failed:', e); }
+});
+
+// Track every successful cloud load
+const _origLoadFromCloud = loadFromCloud;
+loadFromCloud = async function(uid){
+  const r = await _origLoadFromCloud(uid);
+  if(r) _lastCloudLoad = Date.now();
+  return r;
+};
+
+// Network status banner
+function showOfflineBanner(){
+  if(document.getElementById('offline-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'offline-banner';
+  b.style.cssText = 'position:fixed;top:calc(var(--safe-top) + 8px);left:50%;transform:translateX(-50%);z-index:9998;background:rgba(255,159,10,.95);color:#000;font-size:13px;font-weight:600;padding:7px 14px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.3);letter-spacing:-.2px';
+  b.textContent = '⚠️ Offline — changes will sync when reconnected';
+  document.body.appendChild(b);
+}
+function hideOfflineBanner(){
+  const b = document.getElementById('offline-banner');
+  if(b) b.remove();
+}
+window.addEventListener('online', ()=>{
+  hideOfflineBanner();
+  if(currentUser){ _lastCloudLoad = 0; document.dispatchEvent(new Event('visibilitychange')); }
+});
+window.addEventListener('offline', showOfflineBanner);
+if(!navigator.onLine) showOfflineBanner();
 </script>
 </body>
 </html>
