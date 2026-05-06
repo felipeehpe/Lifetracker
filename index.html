@@ -283,7 +283,11 @@ body { font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; 
 .session-start-btn.end-session { background: var(--red); }
 
 /* Exercise row */
-.ex-card { background: var(--surface); border-radius: 14px; overflow: hidden; margin-bottom: 10px; }
+.ex-card { background: var(--surface); border-radius: 16px; overflow: hidden; margin-bottom: 10px; }
+.ex-pills { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.ex-pill { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; background: var(--fill); color: var(--label2); letter-spacing: -.1px; }
+.ex-pill.pr { background: rgba(255,159,10,.14); color: var(--orange); }
+.ex-pill.weight { background: rgba(10,132,255,.12); color: var(--blue); }
 .ex-header { display: flex; align-items: center; padding: 14px 16px; gap: 12px; cursor: pointer; }
 .ex-header:active { background: var(--fill2); }
 .ex-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
@@ -335,10 +339,10 @@ body { font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; 
 .chart-canvas-wrap { position: relative; }
 canvas.chart { width: 100%; height: 120px; }
 
-.overload-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.overload-up { background: rgba(52,199,89,.12); color: var(--green); }
-.overload-down { background: rgba(255,59,48,.1); color: var(--red); }
-.overload-same { background: var(--fill); color: var(--label2); }
+.overload-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; letter-spacing: -.1px; }
+.overload-up { background: rgba(52,199,89,.10); color: var(--green); }
+.overload-down { background: rgba(255,159,10,.10); color: var(--orange); }
+.overload-same { background: var(--fill2); color: var(--label3); }
 
 /* Rest day essential star toggle */
 .rest-essential-btn { font-size:20px; color:var(--label3); padding:4px 8px; cursor:pointer; flex-shrink:0; line-height:1; transition:color .15s; }
@@ -2101,13 +2105,21 @@ function gRenderSessionArea(){
       const isUnilateral=!!(gActiveSession.unilateral&&gActiveSession.unilateral[ex.id]);
       const overload=gGetOverload(ex.id);
       const sidesCol=isUnilateral?'<div class="col-sides">SIDES</div>':'';
-      // Last session hint
-      const prevSessForHint=APP.gym.sessions.filter(s=>s.completed&&s.exercises&&s.exercises[ex.id]&&!(s.skipped&&s.skipped[ex.id])).slice(-1)[0];
+      // Last session - clean pills
+      const allCompleted=APP.gym.sessions.filter(s=>s.completed&&s.exercises&&s.exercises[ex.id]&&!(s.skipped&&s.skipped[ex.id]));
+      const prevSessForHint=allCompleted.slice(-1)[0];
       let lastHint='';
       if(prevSessForHint){
         const pSets=prevSessForHint.exercises[ex.id]||[];
         const pDone=pSets.filter(s=>s.reps&&s.weight);
-        if(pDone.length) lastHint=`<div class="ex-last-hint">Last: ${pDone.map(s=>`${s.reps}×${s.weight}kg`).join(' · ')}</div>`;
+        if(pDone.length){
+          // Best set from last session
+          const best = pDone.reduce((a,b)=>parseFloat(b.weight)>parseFloat(a.weight)?b:a);
+          // PR detection: highest weight ever for this exercise
+          const allWeights = allCompleted.flatMap(s=>(s.exercises[ex.id]||[]).filter(x=>x.reps&&x.weight).map(x=>parseFloat(x.weight)));
+          const isPR = allWeights.length && parseFloat(best.weight)===Math.max(...allWeights);
+          lastHint=`<div class="ex-pills"><span class="ex-pill weight">${best.weight}kg</span><span class="ex-pill">${best.reps} reps</span>${isPR?'<span class="ex-pill pr">🏆 PR</span>':''}<span class="ex-pill" style="opacity:.6">Last</span></div>`;
+        }
       }
 
       html+=`<div class="ex-card fade-up ${isSkipped?'skipped':''}" id="excard-${ex.id}">
