@@ -2697,6 +2697,7 @@ function gRenderRoutines(){
   const list=document.getElementById('g-routines-list');list.innerHTML='';
   APP.gym.routines.forEach(r=>{
     const card=document.createElement('div');card.className='ex-card';card.style.marginBottom='12px';
+    card.dataset.routineId=r.id;
     const exRows=r.exercises.map(e=>`
       <div class="manage-row" data-exid="${e.id}" data-rid="${r.id}" style="padding:10px 16px">
         <div class="drag-handle" style="font-size:18px;color:var(--label3)">☰</div>
@@ -2708,15 +2709,96 @@ function gRenderRoutines(){
         <button class="icon-btn red" onclick="gDeleteExercise('${r.id}','${e.id}')">🗑️</button>
       </div>`).join('');
     card.innerHTML=`
-      <div class="ex-header" style="cursor:default">
+      <div class="ex-header" style="cursor:default;align-items:flex-start">
+        <div class="routine-drag" style="font-size:16px;color:var(--label3);padding:4px 4px 0 0;cursor:grab;touch-action:none;flex-shrink:0">⠿</div>
         <div class="ex-icon" style="background:var(--fill);font-size:22px">${r.emoji}</div>
-        <div class="ex-info"><div class="ex-name">${r.name}</div><div class="ex-meta">${r.exercises.length} exercises</div></div>
+        <div class="ex-info" style="cursor:pointer" onclick="gRenameRoutine('${r.id}')">
+          <div class="ex-name">${r.name}</div>
+          <div class="ex-meta">${r.exercises.length} exercises · tap to rename</div>
+        </div>
+        <button class="icon-btn" onclick="gDuplicateRoutine('${r.id}')" title="Duplicate" style="color:var(--label2)">⎘</button>
         <button class="icon-btn" onclick="gOpenAddExercise('${r.id}')" style="color:var(--blue)">＋</button>
       </div>
       <div class="routine-ex-list" id="rex-${r.id}">${exRows}</div>`;
     list.appendChild(card);
-    // Init drag for this routine's exercise list
     gInitExDrag(document.getElementById('rex-'+r.id), r.id);
+  });
+  gInitRoutineDrag(list);
+}
+
+function gRenameRoutine(routineId){
+  const r = APP.gym.routines.find(x=>x.id===routineId); if(!r) return;
+  const newName = prompt('Routine name:', r.name);
+  if(newName==null) return;
+  const trimmed = newName.trim(); if(!trimmed) return;
+  r.name = trimmed;
+  saveApp();
+  gRenderRoutines();
+  gRenderDayCards();
+}
+
+function gDuplicateRoutine(routineId){
+  const r = APP.gym.routines.find(x=>x.id===routineId); if(!r) return;
+  const copy = {
+    id: 'r'+Date.now(),
+    name: r.name + ' (copy)',
+    emoji: r.emoji,
+    exercises: r.exercises.map(e=>({ ...e, id: 'e'+Date.now()+Math.random().toString(36).slice(2,5) }))
+  };
+  APP.gym.routines.push(copy);
+  saveApp();
+  gRenderRoutines();
+  gRenderDayCards();
+}
+
+function gInitRoutineDrag(list){
+  let dragEl=null, ghost=null, placeholder=null, offsetY=0;
+  function getCards(){ return [...list.querySelectorAll('.ex-card[data-routine-id]')]; }
+  list.addEventListener('touchstart', e=>{
+    const handle = e.target.closest('.routine-drag'); if(!handle) return;
+    e.preventDefault();
+    dragEl = handle.closest('.ex-card');
+    const t = e.touches[0];
+    const rect = dragEl.getBoundingClientRect();
+    offsetY = t.clientY - rect.top;
+    if(navigator.vibrate) navigator.vibrate(8);
+    placeholder = document.createElement('div');
+    placeholder.style.cssText = `height:${rect.height}px;background:var(--fill);border-radius:16px;margin-bottom:12px`;
+    dragEl.after(placeholder);
+    ghost = dragEl.cloneNode(true);
+    ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;z-index:900;opacity:.95;box-shadow:0 12px 36px rgba(0,0,0,.5);border-radius:16px;background:var(--surface);pointer-events:none`;
+    document.body.appendChild(ghost);
+    dragEl.style.opacity = '0';
+  },{passive:false});
+  list.addEventListener('touchmove', e=>{
+    if(!dragEl) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    ghost.style.top = (y - offsetY) + 'px';
+    const cards = getCards().filter(c=>c!==dragEl);
+    let target=null, after=false;
+    for(const c of cards){
+      const rect=c.getBoundingClientRect();
+      const mid=rect.top+rect.height/2;
+      if(y < mid){ target=c; after=false; break; }
+      target=c; after=true;
+    }
+    if(target){
+      if(after) target.after(placeholder); else target.before(placeholder);
+    }
+  },{passive:false});
+  list.addEventListener('touchend', ()=>{
+    if(!dragEl) return;
+    if(placeholder.parentNode) placeholder.before(dragEl);
+    placeholder.remove();
+    if(ghost) ghost.remove();
+    dragEl.style.opacity = '';
+    const order = getCards().map(c=>c.dataset.routineId);
+    APP.gym.routines.sort((a,b)=>order.indexOf(a.id) - order.indexOf(b.id));
+    saveApp();
+    if(navigator.vibrate) navigator.vibrate(8);
+    dragEl=null; ghost=null; placeholder=null;
+    gRenderRoutines(); gRenderDayCards();
   });
 }
 
