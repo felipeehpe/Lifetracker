@@ -922,7 +922,11 @@ body.light .gym-menu-card { background:#fff; }
 
   <!-- Sub: Overview -->
   <div class="page-scroll no-tab" id="g-sub-overview" style="display:none">
-    <div class="sec" style="margin-top:16px">
+    <div class="sec" style="margin-top:18px">
+      <div class="sec-hdr">Insights</div>
+      <div id="g-insights"></div>
+    </div>
+    <div class="sec" style="margin-top:18px">
       <div class="sec-hdr">Weekly Volume</div>
       <div class="vol-card" id="g-vol-card"></div>
     </div>
@@ -2373,8 +2377,130 @@ function gAddSet(exId){
 // ── Progress tab ──
 let gProgressShowAll = {}; // {exId: bool}
 
+function gRenderInsights(){
+  const el = document.getElementById('g-insights'); if(!el) return;
+  const completed = APP.gym.sessions.filter(s=>s.completed);
+  if(!completed.length){
+    el.innerHTML = `<div class="card" style="padding:20px;text-align:center;color:var(--label2);font-size:14px">Complete sessions to unlock insights</div>`;
+    return;
+  }
+  const now = Date.now();
+  const dayMs = 86400000;
+
+  // 1. Strength trend (last 30d vs prev 30d)
+  const last30 = completed.filter(s => (now - new Date(s.date+'T12:00:00').getTime()) <= 30*dayMs);
+  const prev30 = completed.filter(s => {
+    const t = now - new Date(s.date+'T12:00:00').getTime();
+    return t > 30*dayMs && t <= 60*dayMs;
+  });
+  function avgStrength(sessList){
+    let total=0, count=0;
+    sessList.forEach(s=>{
+      Object.entries(s.exercises||{}).forEach(([exId,sets])=>{
+        if(s.skipped&&s.skipped[exId]) return;
+        const m=(s.unilateral&&s.unilateral[exId])?2:1;
+        const str = calcSessionAdjStrength(sets, m);
+        if(str>0){ total+=str; count++; }
+      });
+    });
+    return count?total/count:0;
+  }
+  const lastAvg = avgStrength(last30), prevAvg = avgStrength(prev30);
+  let strLabel='No data yet', strVal='—', strColor='var(--label2)';
+  if(prevAvg>0){
+    const delta=Math.round(((lastAvg-prevAvg)/prevAvg)*100);
+    if(delta>=2){ strLabel='Strength improving'; strVal=`+${delta}%`; strColor='var(--green)'; }
+    else if(delta<=-2){ strLabel='Strength declining'; strVal=`${delta}%`; strColor='var(--orange)'; }
+    else { strLabel='Strength steady'; strVal=`${delta>=0?'+':''}${delta}%`; strColor='var(--label)'; }
+  } else if(last30.length){
+    strLabel='Strength building'; strVal=`${last30.length}`; strColor='var(--blue)';
+  }
+
+  // 2. Weekly consistency (last 7d sessions)
+  const last7 = completed.filter(s => (now - new Date(s.date+'T12:00:00').getTime()) <= 7*dayMs);
+  const targetWeekly = Math.min(APP.gym.routines.length, 5);
+  const consColor = last7.length >= targetWeekly ? 'var(--green)' : last7.length >= 3 ? 'var(--orange)' : 'var(--red)';
+  const consLabel = last7.length >= targetWeekly ? 'On track' : last7.length >= 3 ? 'Pace OK' : 'Pick up pace';
+
+  // 3. PRs this month
+  const monthStart = new Date(NOW.getFullYear(), NOW.getMonth(), 1);
+  let prCount = 0;
+  APP.gym.routines.forEach(r=>{
+    r.exercises.forEach(ex=>{
+      const sessWithEx = completed.filter(s=>s.exercises&&s.exercises[ex.id]&&!(s.skipped&&s.skipped[ex.id]));
+      if(sessWithEx.length<2) return;
+      const allWeights = sessWithEx.flatMap(s=>(s.exercises[ex.id]||[]).filter(x=>x.reps&&x.weight).map(x=>parseFloat(x.weight)));
+      if(!allWeights.length) return;
+      const max = Math.max(...allWeights);
+      // Was a PR set this month?
+      const monthSess = sessWithEx.filter(s => new Date(s.date+'T12:00:00') >= monthStart);
+      const monthMax = monthSess.flatMap(s=>(s.exercises[ex.id]||[]).filter(x=>x.reps&&x.weight).map(x=>parseFloat(x.weight)));
+      if(monthMax.length && Math.max(...monthMax)===max) prCount++;
+    });
+  });
+
+  // 4. Volume trend
+  const lastWeekVol = (function(){
+    let v=0;
+    last7.forEach(s=>{
+      Object.entries(s.exercises||{}).forEach(([exId,sets])=>{
+        if(s.skipped&&s.skipped[exId]) return;
+        const m=(s.unilateral&&s.unilateral[exId])?2:1;
+        sets.forEach(set=>{ v+=(parseFloat(set.reps)||0)*(parseFloat(set.weight)||0)*m; });
+      });
+    });
+    return v;
+  })();
+  const prev7 = completed.filter(s=>{
+    const t = now - new Date(s.date+'T12:00:00').getTime();
+    return t > 7*dayMs && t <= 14*dayMs;
+  });
+  const prevWeekVol = (function(){
+    let v=0;
+    prev7.forEach(s=>{
+      Object.entries(s.exercises||{}).forEach(([exId,sets])=>{
+        if(s.skipped&&s.skipped[exId]) return;
+        const m=(s.unilateral&&s.unilateral[exId])?2:1;
+        sets.forEach(set=>{ v+=(parseFloat(set.reps)||0)*(parseFloat(set.weight)||0)*m; });
+      });
+    });
+    return v;
+  })();
+  let volLabel='Volume', volVal=`${Math.round(lastWeekVol/1000)}k kg`, volColor='var(--label)';
+  if(prevWeekVol>0){
+    const delta = Math.round(((lastWeekVol-prevWeekVol)/prevWeekVol)*100);
+    if(delta>=5){ volLabel='Volume up'; volColor='var(--green)'; volVal=`+${delta}%`; }
+    else if(delta<=-5){ volLabel='Volume down'; volColor='var(--orange)'; volVal=`${delta}%`; }
+    else { volLabel='Volume steady'; volColor='var(--label)'; volVal=`${delta>=0?'+':''}${delta}%`; }
+  }
+
+  el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="background:var(--surface);border-radius:14px;padding:16px">
+      <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📈 ${strLabel}</div>
+      <div style="font-size:24px;font-weight:800;color:${strColor};letter-spacing:-.5px;line-height:1">${strVal}</div>
+      <div style="font-size:11px;color:var(--label3);margin-top:4px">vs last 30 days</div>
+    </div>
+    <div style="background:var(--surface);border-radius:14px;padding:16px">
+      <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🎯 ${consLabel}</div>
+      <div style="font-size:24px;font-weight:800;color:${consColor};letter-spacing:-.5px;line-height:1">${last7.length}/${targetWeekly}</div>
+      <div style="font-size:11px;color:var(--label3);margin-top:4px">sessions this week</div>
+    </div>
+    <div style="background:var(--surface);border-radius:14px;padding:16px">
+      <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🏆 PRs this month</div>
+      <div style="font-size:24px;font-weight:800;color:${prCount>0?'var(--orange)':'var(--label2)'};letter-spacing:-.5px;line-height:1">${prCount}</div>
+      <div style="font-size:11px;color:var(--label3);margin-top:4px">${prCount===1?'personal record':'personal records'}</div>
+    </div>
+    <div style="background:var(--surface);border-radius:14px;padding:16px">
+      <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">⚡ ${volLabel}</div>
+      <div style="font-size:24px;font-weight:800;color:${volColor};letter-spacing:-.5px;line-height:1">${volVal}</div>
+      <div style="font-size:11px;color:var(--label3);margin-top:4px">vs prior 7 days</div>
+    </div>
+  </div>`;
+}
+
 function gRenderProgress(){
   gRenderWeightTracker();
+  gRenderInsights();
   // Weekly volume bars
   const volCard=document.getElementById('g-vol-card');
   const volData=Array.from({length:7},(_,i)=>{
