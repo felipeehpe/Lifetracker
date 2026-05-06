@@ -1008,7 +1008,8 @@ body.light .gym-menu-card { background:#fff; }
   <!-- Overview -->
   <div class="page-scroll no-tab" id="f-tab-overview">
     <div id="f-balance-hero"></div>
-    <div class="sec" style="margin-top:14px"><div class="sec-hdr">Spending by Category</div><div class="card" id="f-pie-card"></div></div>
+    <div class="sec" style="margin-top:18px"><div class="sec-hdr" id="f-spending-hdr">Spending</div><div class="card" id="f-pie-card"></div></div>
+    <div class="sec"><div class="card" style="padding:12px 16px;cursor:pointer" onclick="fOpenStartingBalance()"><div style="display:flex;align-items:center;gap:10px"><div style="font-size:18px">⚙️</div><div style="flex:1"><div style="font-size:14px;font-weight:500">Set starting balance</div><div style="font-size:12px;color:var(--label2)">Adjust your real account amount</div></div><div style="font-size:14px;color:var(--label3)">›</div></div></div></div>
     <div style="height:20px"></div>
   </div>
 
@@ -3098,61 +3099,82 @@ function fGetMonthTx(y,m){
 }
 
 function fRenderOverview(){
-  const txs=fGetMonthTx(NOW.getFullYear(),NOW.getMonth());
-  const income=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
-  const expense=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
-  const balance=income-expense;
+  // ALL-TIME real money (persistent, never resets monthly)
+  const allTxs = (APP.finance?.transactions||[]).filter(t=>t.status!=='ignored');
+  const totalIncome = allTxs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const totalExpense = allTxs.filter(t=>t.type==='expense' && t.status!=='pending').reduce((a,t)=>a+t.amount,0);
+  const startingBalance = APP.finance?.startingBalance || 0;
+  const available = startingBalance + totalIncome - totalExpense;
 
-  // Balance hero
+  // Monthly analytics (separate from real money)
+  const txs=fGetMonthTx(NOW.getFullYear(),NOW.getMonth()).filter(t=>t.status!=='ignored');
+  const income=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const expense=txs.filter(t=>t.type==='expense' && t.status!=='pending').reduce((a,t)=>a+t.amount,0);
+  const monthNet=income-expense;
+  const todayExpense=txs.filter(t=>t.type==='expense' && t.date===TODAY && t.status!=='pending').reduce((a,t)=>a+t.amount,0);
+  const pendingCount=(APP.finance?.transactions||[]).filter(t=>t.status==='pending').length;
+
   document.getElementById('f-balance-hero').innerHTML=`
-    <div style="margin:16px 16px 0;background:linear-gradient(135deg,#0a1f0a,#0d3b14);border-radius:16px;padding:20px">
-      <div style="font-size:12px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${MONTHS[NOW.getMonth()]} ${NOW.getFullYear()}</div>
-      <div style="font-size:38px;font-weight:800;letter-spacing:-1.5px;color:${balance>=0?'#32D74B':'#FF453A'}">${balance>=0?'+':''}$${Math.abs(balance).toFixed(2)}</div>
-      <div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:14px">Net balance</div>
-      <div style="display:flex;gap:12px">
-        <div style="flex:1;background:rgba(50,215,75,.1);border-radius:10px;padding:10px">
-          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:2px">Income</div>
-          <div style="font-size:18px;font-weight:700;color:#32D74B">+$${income.toFixed(2)}</div>
-        </div>
-        <div style="flex:1;background:rgba(255,69,58,.1);border-radius:10px;padding:10px">
-          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:2px">Expenses</div>
-          <div style="font-size:18px;font-weight:700;color:#FF453A">-$${expense.toFixed(2)}</div>
-        </div>
+    <div style="margin:16px 16px 0;background:var(--surface);border-radius:20px;padding:24px 22px;border:1px solid var(--sep)">
+      <div style="font-size:11px;color:var(--label3);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:8px">Available Money</div>
+      <div style="font-size:42px;font-weight:800;letter-spacing:-1.8px;color:var(--label);line-height:1">$${available.toFixed(2)}</div>
+      <div style="font-size:13px;color:var(--label2);margin-top:6px">Real account state</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 16px 0">
+      <div style="background:var(--surface);border-radius:14px;padding:14px 16px">
+        <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Today</div>
+        <div style="font-size:22px;font-weight:700;color:${todayExpense>0?'var(--red)':'var(--label2)'};letter-spacing:-.5px">${todayExpense>0?'-$'+todayExpense.toFixed(2):'$0'}</div>
       </div>
-    </div>`;
+      <div style="background:var(--surface);border-radius:14px;padding:14px 16px">
+        <div style="font-size:11px;color:var(--label3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">This Month</div>
+        <div style="font-size:22px;font-weight:700;color:${monthNet>=0?'var(--green)':'var(--red)'};letter-spacing:-.5px">${monthNet>=0?'+':''}$${Math.abs(monthNet).toFixed(0)}</div>
+      </div>
+    </div>
+    ${pendingCount>0?`<div style="margin:10px 16px 0;background:var(--surface);border:1px dashed var(--sep-solid);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="fGoTab('transactions',document.querySelector('#page-finance .seg-btn:nth-child(2)'))">
+      <div style="font-size:18px">⏳</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600">${pendingCount} pending transaction${pendingCount>1?'s':''}</div>
+        <div style="font-size:12px;color:var(--label2)">Tap to review</div>
+      </div>
+      <div style="font-size:14px;color:var(--blue);font-weight:600">›</div>
+    </div>`:''}`;
+
+  // Spending by category header
+  const hdrEl=document.getElementById('f-spending-hdr');
+  if(hdrEl) hdrEl.textContent=`${MONTHS[NOW.getMonth()]} · Spending`;
 
   // Pie chart by category
   const byCat={};
   txs.filter(t=>t.type==='expense').forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount;});
   const catData=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const total=catData.reduce((a,c)=>a+c[1],0)||1;
-
-  // Build pie SVG
-  const cx=64,cy=64,r=54;
-  let startAngle=-Math.PI/2;
-  let slices='';
-  catData.forEach(([catId,amt])=>{
-    const cat=fGetCat(catId);
-    const angle=(amt/total)*2*Math.PI;
-    const endAngle=startAngle+angle;
-    const x1=cx+r*Math.cos(startAngle), y1=cy+r*Math.sin(startAngle);
-    const x2=cx+r*Math.cos(endAngle), y2=cy+r*Math.sin(endAngle);
-    const large=angle>Math.PI?1:0;
-    slices+=`<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${cat.color}" opacity=".85"/>`;
-    startAngle=endAngle;
-  });
-
   const pie=document.getElementById('f-pie-card');
   if(!catData.length){pie.innerHTML=`<div class="empty"><div class="empty-ico">💰</div><div class="empty-h">No expenses yet</div><div class="empty-p">Tap + to log your first transaction.</div></div>`;return;}
-  pie.innerHTML=`<div style="display:flex;align-items:center;gap:16px;padding:16px">
-    <svg width="128" height="128" viewBox="0 0 128 128" style="flex-shrink:0">
-      ${slices||`<circle cx="64" cy="64" r="54" fill="var(--fill)"/>`}
-      <circle cx="64" cy="64" r="30" fill="var(--surface)"/>
-      <text x="64" y="60" text-anchor="middle" font-size="11" fill="var(--label2)" font-family="-apple-system,sans-serif">Spent</text>
-      <text x="64" y="76" text-anchor="middle" font-size="14" font-weight="700" fill="var(--label)" font-family="-apple-system,sans-serif">$${expense.toFixed(0)}</text>
-    </svg>
-    <div style="flex:1;display:flex;flex-direction:column;gap:7px">
-      ${catData.map(([catId,amt])=>{const cat=fGetCat(catId);const pct=Math.round(amt/total*100);return `<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:${cat.color};flex-shrink:0"></div><div style="flex:1;font-size:12px;color:var(--label2)">${cat.emoji} ${cat.label}</div><div style="font-size:12px;font-weight:600">${pct}%</div></div>`}).join('')}
+  // Horizontal category bars - cleaner than donut
+  pie.innerHTML=`<div style="padding:18px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+      <div style="font-size:13px;color:var(--label2)">Total spent</div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.5px">$${expense.toFixed(2)}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      ${catData.map(([catId,amt])=>{
+        const cat=fGetCat(catId);
+        const pct=Math.round(amt/total*100);
+        return `<div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--label)">
+              <span style="font-size:15px">${cat.emoji}</span><span style="font-weight:500">${cat.label}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="font-size:13px;color:var(--label2)">${pct}%</div>
+              <div style="font-size:13px;font-weight:600;letter-spacing:-.2px">$${amt.toFixed(0)}</div>
+            </div>
+          </div>
+          <div style="height:6px;background:var(--fill);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${cat.color};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
   </div>`;
 
@@ -3161,18 +3183,20 @@ function fRenderOverview(){
 // Shared transaction row builder used by BOTH overview and transactions tab
 function fMakeTxRow(tx){
   const cat=fGetCat(tx.cat);
+  const isPending = tx.status==='pending';
   const wrap=document.createElement('div');
   wrap.style.cssText='position:relative;overflow:hidden;border-bottom:1px solid var(--sep)';
+  const pendingBadge = isPending ? `<span style="font-size:10px;font-weight:600;color:var(--orange);background:rgba(255,159,10,.12);padding:2px 7px;border-radius:8px;margin-left:6px">PENDING</span>` : '';
   wrap.innerHTML=`
     <div style="position:absolute;left:0;top:0;bottom:0;width:76px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:600;cursor:pointer" onclick="fOpenEditTx('${tx.id}')">✏️ Edit</div>
     <div style="position:absolute;right:0;top:0;bottom:0;width:76px;background:var(--red);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:600;cursor:pointer" onclick="fDeleteTx('${tx.id}')">🗑️ Del</div>
-    <div class="f-tx-row" style="background:var(--surface);transition:transform .22s cubic-bezier(.32,.72,0,1);touch-action:pan-y">
-      <div class="f-cat-icon" style="background:${cat.color}33;border:2px solid ${cat.color}66">${cat.emoji}</div>
+    <div class="f-tx-row" style="background:var(--surface);transition:transform .22s cubic-bezier(.32,.72,0,1);touch-action:pan-y;${isPending?'opacity:.6':''}">
+      <div class="f-cat-icon" style="background:${cat.color}33;border:2px solid ${cat.color}66${isPending?';border-style:dashed':''}">${cat.emoji}</div>
       <div class="f-tx-info">
-        <div class="f-tx-name">${tx.desc||cat.label}</div>
+        <div class="f-tx-name">${tx.desc||cat.label}${pendingBadge}</div>
         <div class="f-tx-date"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${cat.color};margin-right:4px;vertical-align:middle"></span>${cat.label} · ${tx.date}</div>
       </div>
-      <div class="f-tx-amount" style="color:${tx.type==='income'?'var(--green)':'var(--red)'}">${tx.type==='income'?'+':'-'}$${tx.amount.toFixed(2)}</div>
+      <div class="f-tx-amount" style="color:${tx.type==='income'?'var(--green)':'var(--red)'};${isPending?'font-style:italic':''}">${tx.type==='income'?'+':'-'}$${tx.amount.toFixed(2)}</div>
     </div>`;
   return wrap;
 }
@@ -3198,6 +3222,8 @@ function fAttachSwipe(container){
   });
 }
 
+let fExpandedGroups = new Set(); // groups currently expanded
+
 function fRenderTransactions(){
   document.getElementById('f-txMonthLabel').textContent=`${MONTHS[fvM]} ${fvY}`;
   const txs=fGetMonthTx(fvY,fvM).sort((a,b)=>b.date.localeCompare(a.date));
@@ -3213,12 +3239,65 @@ function fRenderTransactions(){
     const d=new Date(date+'T12:00:00');
     const label=`${WDAYS[d.getDay()]}, ${MONTHS[parseInt(mm)-1]} ${parseInt(dd)}`;
     const hdr=document.createElement('div');
-    hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--label2);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:4px';
-    hdr.innerHTML=`<span>${label}</span><span style="color:${dayTotal>=0?'var(--green)':'var(--red)'}">${dayTotal>=0?'+':''}$${Math.abs(dayTotal).toFixed(2)}</span>`;
+    hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:14px 18px 8px;font-size:11px;font-weight:600;color:var(--label3);text-transform:uppercase;letter-spacing:.8px';
+    hdr.innerHTML=`<span>${label}</span><span style="color:${dayTotal>=0?'var(--green)':'var(--label2)'};font-weight:600">${dayTotal>=0?'+':''}$${Math.abs(dayTotal).toFixed(2)}</span>`;
     list.appendChild(hdr);
-    dayTxs.forEach(tx=>{ list.appendChild(fMakeTxRow(tx)); });
+
+    // Within day: group same-category transactions with 2+ items
+    const byCat={};
+    dayTxs.forEach(tx=>{
+      if(tx.type==='expense'){
+        const k=tx.cat;
+        if(!byCat[k]) byCat[k]=[];
+        byCat[k].push(tx);
+      }
+    });
+    const handled = new Set();
+    dayTxs.forEach(tx=>{
+      if(handled.has(tx.id)) return;
+      const sameCat = (tx.type==='expense' && byCat[tx.cat] && byCat[tx.cat].length>=2) ? byCat[tx.cat] : null;
+      if(sameCat){
+        const groupKey=`${date}_${tx.cat}`;
+        const expanded=fExpandedGroups.has(groupKey);
+        sameCat.forEach(t=>handled.add(t.id));
+        if(expanded){
+          // header for the group + each tx
+          const grpHdr=document.createElement('div');
+          grpHdr.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 18px;font-size:11px;color:var(--label3);font-weight:600;cursor:pointer';
+          const cat=fGetCat(tx.cat);
+          grpHdr.innerHTML=`<span style="font-size:13px">${cat.emoji}</span><span>${cat.label} · ${sameCat.length} items</span><span style="margin-left:auto;color:var(--blue)">Collapse</span>`;
+          grpHdr.onclick=()=>{ fExpandedGroups.delete(groupKey); fRenderTransactions(); };
+          list.appendChild(grpHdr);
+          sameCat.forEach(t=>list.appendChild(fMakeTxRow(t)));
+        } else {
+          list.appendChild(fMakeTxGroupRow(sameCat, groupKey));
+        }
+      } else {
+        handled.add(tx.id);
+        list.appendChild(fMakeTxRow(tx));
+      }
+    });
   });
   fAttachSwipe(list);
+}
+
+function fMakeTxGroupRow(txList, groupKey){
+  const cat=fGetCat(txList[0].cat);
+  const total=txList.reduce((s,t)=>s+t.amount,0);
+  const wrap=document.createElement('div');
+  wrap.style.cssText='border-bottom:1px solid var(--sep)';
+  wrap.innerHTML=`
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer">
+      <div class="f-cat-icon" style="background:${cat.color}33;border:2px solid ${cat.color}66">${cat.emoji}</div>
+      <div style="flex:1;min-width:0">
+        <div class="f-tx-name">${cat.label}</div>
+        <div class="f-tx-date"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${cat.color};margin-right:4px;vertical-align:middle"></span>${txList.length} transactions</div>
+      </div>
+      <div class="f-tx-amount" style="color:var(--red)">-$${total.toFixed(2)}</div>
+      <div style="font-size:14px;color:var(--label3);margin-left:6px">›</div>
+    </div>`;
+  wrap.onclick=()=>{ fExpandedGroups.add(groupKey); fRenderTransactions(); };
+  return wrap;
 }
 
 function fDeleteTx(id){
@@ -3374,6 +3453,19 @@ function fMoveBudgetCat(catId, dir){
   if(!APP.finance) APP.finance={};
   APP.finance.catOrder=ordered;
   saveApp(); fRenderBudgets();
+}
+
+function fOpenStartingBalance(){
+  const cur = APP.finance?.startingBalance || 0;
+  const v = prompt('Set starting balance (real account amount before tracking):', cur.toFixed(2));
+  if(v===null) return;
+  const n = parseFloat(v);
+  if(isNaN(n)) return;
+  if(!APP.finance) APP.finance={};
+  APP.finance.startingBalance = n;
+  saveApp();
+  fRenderOverview();
+  updateFinanceStats();
 }
 
 function fInitBudgetDrag(list){
@@ -4098,12 +4190,14 @@ function fDeleteBudget(){
 }
 
 function updateFinanceStats(){
-  const txs=fGetMonthTx(NOW.getFullYear(),NOW.getMonth());
-  const income=txs.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
-  const expense=txs.filter(t=>t.type==='expense').reduce((a,t)=>a+t.amount,0);
-  const bal=income-expense;
+  // Show Available Money (real, persistent) on home card
+  const all = (APP.finance?.transactions||[]).filter(t=>t.status!=='ignored');
+  const inAll = all.filter(t=>t.type==='income').reduce((a,t)=>a+t.amount,0);
+  const outAll = all.filter(t=>t.type==='expense' && t.status!=='pending').reduce((a,t)=>a+t.amount,0);
+  const startingBalance = APP.finance?.startingBalance || 0;
+  const available = startingBalance + inAll - outAll;
   const el=document.getElementById('card-finance-bal');
-  if(el) el.textContent=(bal>=0?'+':'')+`$${Math.abs(bal).toFixed(0)}`;
+  if(el) el.textContent=`$${Math.round(available)}`;
 }
 
 // ══════════════════════════════════════════════════
@@ -4474,6 +4568,7 @@ async function loadFromCloud(uid){
         customCats: localData?.finance?.customCats || [],
         catColors: localData?.finance?.catColors || {},
         catOrder: localData?.finance?.catOrder || [],
+        startingBalance: localData?.finance?.startingBalance || 0,
         pending: localData?.finance?.pending || []
       }
     };
