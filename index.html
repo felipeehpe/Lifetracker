@@ -1565,40 +1565,145 @@ function hRenderToday(){
   if(!h.length){list.innerHTML=`<div class="empty"><div class="empty-ico">✅</div><div class="empty-h">No habits yet</div><div class="empty-p">Tap + to add your first habit.</div></div>`;return;}
   list.innerHTML='';
 
-  // Split into mandatory and optional when rest day is active
-  const mandatoryHabits=isRest?h.filter(x=>essIds.includes(x.id)):h;
-  const optionalHabits=isRest?h.filter(x=>!essIds.includes(x.id)):[];
+  // Apply user-defined order
+  const habitOrder = APP.habits?.habitOrder || [];
+  const ordered = [
+    ...habitOrder.filter(id => h.find(x=>x.id===id)).map(id => h.find(x=>x.id===id)),
+    ...h.filter(x => !habitOrder.includes(x.id))
+  ];
 
-  const renderHabit=(hb,isMandatory)=>{
+  // Split: pending vs completed when not rest day; mandatory vs optional when rest day
+  let mandatoryHabits, optionalHabits;
+  if(isRest){
+    mandatoryHabits = ordered.filter(x=>essIds.includes(x.id));
+    optionalHabits  = ordered.filter(x=>!essIds.includes(x.id));
+  } else {
+    // Move completed to bottom
+    const pending = ordered.filter(x=>!log[x.id]);
+    const done = ordered.filter(x=>log[x.id]);
+    mandatoryHabits = pending;
+    optionalHabits = done;
+  }
+
+  const renderHabit=(hb,zone)=>{
+    // zone: 'mandatory' | 'optional' | 'pending' | 'done'
     const isDone=!!log[hb.id], s=hHabitStreak(hb.id);
     const row=document.createElement('div'); row.className='habit-row';
-    if(isRest&&!isMandatory) row.style.opacity='0.45';
-    // move button: down arrow for mandatory (move to optional), up arrow for optional (move to mandatory)
-    const moveBtn=isRest?`<div class="rest-move-btn" onclick="event.stopPropagation();hToggleEssential('${hb.id}')" title="${isMandatory?'Move to Optional':'Move to Mandatory'}">${isMandatory?'↓':'↑'}</div>`:'';
-    row.innerHTML=`<div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>${moveBtn}`;
-    row.addEventListener('click',()=>{
+    row.dataset.habitId = hb.id;
+    row.dataset.zone = zone;
+    if((isRest && zone==='optional') || (!isRest && zone==='done')) row.style.opacity='0.5';
+    row.innerHTML=`<div class="habit-drag" style="color:var(--label3);font-size:16px;padding:0 8px 0 0;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;flex-shrink:0">⠿</div><div class="hcheck ${isDone?'on':''}" id="hck_${hb.id}"><svg width="13" height="10" viewBox="0 0 13 10" fill="none"><path d="M1.5 5L5 8.5L11.5 1.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hemoji">${hb.emoji}</div><div class="htext"><div class="hname ${isDone?'done':''}">${hb.name}</div>${s>=2?`<div class="hstreak">🔥 ${s}-day streak</div>`:s===1?'<div class="hstreak">🌱 1-day streak</div>':''}</div>`;
+    row.addEventListener('click',(e)=>{
+      if(e.target.closest('.habit-drag')) return;
       const wasOff=!hGetLog(TODAY)[hb.id]; hToggleLog(TODAY,hb.id);
-      if(wasOff){const cb=document.getElementById('hck_'+hb.id);if(cb){cb.classList.add('on','pop');setTimeout(()=>cb.classList.remove('pop'),300);}setTimeout(()=>{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();},150);}
+      if(navigator.vibrate) navigator.vibrate(10);
+      if(wasOff){const cb=document.getElementById('hck_'+hb.id);if(cb){cb.classList.add('on','pop');setTimeout(()=>cb.classList.remove('pop'),300);}setTimeout(()=>{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();},220);}
       else{hRenderToday();hRenderCalendar();hRenderAnalysis();updateHomeStats();}
     });
     list.appendChild(row);
   };
 
-  if(isRest){
-    const mandHdr=document.createElement('div');
-    mandHdr.style.cssText='padding:6px 16px 2px;font-size:11px;color:var(--green);font-weight:600;text-transform:uppercase;letter-spacing:.5px';
-    mandHdr.textContent='Mandatory';
-    list.appendChild(mandHdr);
-  }
-  mandatoryHabits.forEach(hb=>renderHabit(hb,true));
+  // Top zone header
+  const topHdr=document.createElement('div');
+  topHdr.style.cssText='padding:8px 18px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:'+(isRest?'var(--green)':'var(--label3)');
+  topHdr.textContent=isRest?'Mandatory':'To do';
+  topHdr.dataset.zoneHdr=isRest?'mandatory':'pending';
+  list.appendChild(topHdr);
+  mandatoryHabits.forEach(hb=>renderHabit(hb,isRest?'mandatory':'pending'));
 
-  if(isRest&&optionalHabits.length){
+  if(optionalHabits.length){
     const sep=document.createElement('div');
-    sep.style.cssText='padding:8px 16px 2px;font-size:11px;color:var(--orange);font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--sep);margin-top:6px';
-    sep.innerHTML='🛌 Optional';
+    sep.style.cssText='padding:14px 18px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:'+(isRest?'var(--orange)':'var(--label3)');
+    sep.dataset.zoneHdr=isRest?'optional':'done';
+    sep.innerHTML=isRest?'🛌 Optional':'Completed';
     list.appendChild(sep);
-    optionalHabits.forEach(hb=>renderHabit(hb,false));
+    optionalHabits.forEach(hb=>renderHabit(hb,isRest?'optional':'done'));
   }
+  hInitHabitDrag(list, isRest);
+}
+
+function hInitHabitDrag(list, isRest){
+  let dragEl=null, ghost=null, placeholder=null, offsetY=0, longPressTimer=null;
+
+  function getRows(){ return [...list.querySelectorAll('.habit-row')]; }
+
+  function onMove(clientY){
+    if(!dragEl||!ghost) return;
+    ghost.style.top = (clientY - offsetY) + 'px';
+    const rows = getRows().filter(r=>r!==dragEl);
+    let target=null, after=false;
+    for(const row of rows){
+      const rect=row.getBoundingClientRect();
+      const mid=rect.top+rect.height/2;
+      if(clientY < mid){ target=row; after=false; break; }
+      target=row; after=true;
+    }
+    if(target){
+      // also detect zone headers
+      const headers=[...list.querySelectorAll('[data-zone-hdr]')];
+      let newZone=target.dataset.zone;
+      for(const hdr of headers){
+        const hRect=hdr.getBoundingClientRect();
+        if(clientY > hRect.top && clientY < hRect.bottom + 200){
+          // snap zone of placeholder to this header's zone
+          newZone = hdr.dataset.zoneHdr;
+        }
+      }
+      placeholder.dataset.zone = newZone;
+      if(after) target.after(placeholder);
+      else target.before(placeholder);
+    }
+  }
+
+  list.addEventListener('touchstart', e=>{
+    const handle=e.target.closest('.habit-drag'); if(!handle) return;
+    e.preventDefault();
+    dragEl=handle.closest('.habit-row');
+    const t=e.touches[0];
+    const rect=dragEl.getBoundingClientRect();
+    offsetY=t.clientY-rect.top;
+    if(navigator.vibrate) navigator.vibrate(8);
+    placeholder=document.createElement('div');
+    placeholder.style.cssText=`height:${rect.height}px;background:var(--fill);border-radius:12px;margin:4px 12px`;
+    placeholder.dataset.zone=dragEl.dataset.zone;
+    dragEl.after(placeholder);
+    ghost=dragEl.cloneNode(true);
+    ghost.style.cssText=`position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;z-index:900;opacity:.95;box-shadow:0 12px 36px rgba(0,0,0,.5);border-radius:14px;background:var(--surface);pointer-events:none`;
+    document.body.appendChild(ghost);
+    dragEl.style.opacity='0';
+  },{passive:false});
+
+  list.addEventListener('touchmove', e=>{
+    if(!dragEl) return;
+    e.preventDefault();
+    onMove(e.touches[0].clientY);
+  },{passive:false});
+
+  list.addEventListener('touchend', ()=>{
+    if(!dragEl) return;
+    const newZone = placeholder.dataset.zone;
+    const habitId = dragEl.dataset.habitId;
+    if(placeholder.parentNode) placeholder.before(dragEl);
+    placeholder.remove();
+    if(ghost) ghost.remove();
+    dragEl.style.opacity='';
+    // If zone changed, update mandatory/optional list
+    if(isRest && newZone && newZone !== dragEl.dataset.zone){
+      if(!APP.habits.essentialHabits) APP.habits.essentialHabits=[];
+      const ess=APP.habits.essentialHabits;
+      const i=ess.indexOf(habitId);
+      if(newZone==='mandatory' && i<0) ess.push(habitId);
+      if(newZone==='optional' && i>=0) ess.splice(i,1);
+    }
+    // Save reorder: read DOM order of habit IDs
+    const rowIds = getRows().map(r=>r.dataset.habitId);
+    if(!APP.habits) APP.habits={};
+    APP.habits.habitOrder = rowIds;
+    saveApp();
+    if(navigator.vibrate) navigator.vibrate(8);
+    dragEl=null; ghost=null; placeholder=null;
+    hRenderToday();
+  });
 }
 
 function hRenderCalendar(){
@@ -4553,7 +4658,9 @@ async function loadFromCloud(uid){
       habits: {
         monthHabits: Object.keys(monthHabits).length ? monthHabits : (localData?.habits?.monthHabits || { [THIS_MO]: HABIT_DEFAULTS.map(h=>({...h})) }),
         logs: Object.keys(logMap).length ? logMap : (localData?.habits?.logs || {}),
-        restDays: Object.keys(restDaysFromCloud).length ? restDaysFromCloud : (localData?.habits?.restDays || {})
+        restDays: Object.keys(restDaysFromCloud).length ? restDaysFromCloud : (localData?.habits?.restDays || {}),
+        essentialHabits: localData?.habits?.essentialHabits || [],
+        habitOrder: localData?.habits?.habitOrder || []
       },
       gym: {
         routines: gymRoutines,
